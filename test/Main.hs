@@ -3,7 +3,7 @@ module Main where
 import Test.Hspec
 import Data.Yaml (decodeFileEither, ParseException)
 import Data.Either (isRight)
-import MyLib (WorkoutTemplate)
+import WorkoutTemplate (WorkoutTemplate)
 
 main :: IO ()
 main = hspec $ do
