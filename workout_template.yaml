@@ -1,0 +1,25 @@
+week_days:
+  - name: "Push Day"
+    exercises:
+      - name: "Bench Press"
+        muscle_group: "Chest"
+        initial_sets: 4
+      - name: "Overhead Press"
+        muscle_group: "Shoulders"
+        initial_sets: 3
+  - name: "Pull Day"
+    exercises:
+      - name: "Barbell Row"
+        muscle_group: "Back"
+        initial_sets: 4
+      - name: "Biceps Curl"
+        muscle_group: "Arms"
+        initial_sets: 3
+  - name: "Leg Day"
+    exercises:
+      - name: "Squat"
+        muscle_group: "Quads"
+        initial_sets: 4
+      - name: "Leg Curl"
+        muscle_group: "Hamstrings"
+        initial_sets: 3
