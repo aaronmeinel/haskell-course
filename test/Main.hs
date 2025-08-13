@@ -7,6 +7,7 @@ import qualified WorkoutTemplate
 import qualified Mesocycle
 import MesocyclePersistence (saveMesocycle, loadMesocycle)
 import System.Directory (removeFile, getTemporaryDirectory)
+import qualified WorkoutLogOpsSpec
 
 
 main :: IO ()
@@ -343,4 +344,6 @@ main = hspec $ do
         let updated = Mesocycle.logPostExerciseFeedback baseMeso 1 "Push" "Bench Press" Mesocycle.HighPain Mesocycle.AmazingPump Mesocycle.TooMuch
             ex' = head . Mesocycle.exercises . head . Mesocycle.workouts . head $ Mesocycle.weeks updated
         Mesocycle.postFeedback ex' `shouldBe` Just (Mesocycle.PostExerciseFeedback (Just Mesocycle.HighPain) (Just Mesocycle.AmazingPump) (Just Mesocycle.TooMuch))
+
+  WorkoutLogOpsSpec.spec
 
