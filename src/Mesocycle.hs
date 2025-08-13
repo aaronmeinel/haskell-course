@@ -99,3 +99,10 @@ findNextActiveExercise (Mesocycle { weeks }) = find needsInput allExercises
                    , ex <- exercises wo
                    ]
     needsInput (_, _, ex) = performedSets ex == Nothing || performedReps ex == Nothing
+
+-- | Given the current week and total training weeks, prescribe RIR.
+prescribedRIR :: Int -> Int -> Int
+prescribedRIR week totalWeeks
+  | week < totalWeeks = max 0 (3 - (week - 1))
+  | week == totalWeeks = 8  -- deload week
+  | otherwise = error "Week out of range for prescribedRIR"

@@ -171,3 +171,15 @@ main = hspec $ do
             }
       Mesocycle.findNextActiveExercise meso `shouldBe` Nothing
 
+  describe "prescribedRIR" $ do
+    it "prescribes RIR 3 for week 1 of 4" $ do
+      Mesocycle.prescribedRIR 1 4 `shouldBe` 3
+    it "prescribes RIR 2 for week 2 of 4" $ do
+      Mesocycle.prescribedRIR 2 4 `shouldBe` 2
+    it "prescribes RIR 1 for week 3 of 4" $ do
+      Mesocycle.prescribedRIR 3 4 `shouldBe` 1
+    it "prescribes RIR 0 for week 4 of 4 (last training week)" $ do
+      Mesocycle.prescribedRIR 4 4 `shouldBe` 8
+    it "prescribes RIR 8 for deload week (week == totalWeeks)" $ do
+      Mesocycle.prescribedRIR 4 4 `shouldBe` 8
+
