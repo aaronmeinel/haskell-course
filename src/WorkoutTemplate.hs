@@ -5,13 +5,17 @@ module WorkoutTemplate (
   WorkoutTemplate(..),
   Workout(..),
   Exercise(..),
-  MuscleGroup(..)
+  MuscleGroup(..),
+  someFunc
 ) where
 
 import Data.Yaml
 import Data.Aeson (ToJSON, FromJSON, toJSON, parseJSON, withText, withObject, (.:))
 import GHC.Generics (Generic)
 import qualified Data.Text as T
+
+someFunc :: IO ()
+someFunc = putStrLn "Stub: WorkoutTemplate.someFunc called."
 
 -- Represents a muscle group, e.g., Chest, Back, Hamstrings
 -- ...existing code...

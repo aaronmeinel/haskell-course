@@ -4,6 +4,7 @@ module Mesocycle where
 
 import GHC.Generics (Generic)
 import Data.List (find)
+import Data.Aeson (ToJSON, FromJSON, encode, decode)
 
 import qualified WorkoutTemplate
 
@@ -22,7 +23,18 @@ data Pump = LowPump | ModeratePump | AmazingPump
 data Workload = Easy | PrettyGood | PushedLimits | TooMuch
   deriving (Show, Eq, Enum, Generic)
 
--- Updated feedback types
+
+
+instance ToJSON Soreness
+instance FromJSON Soreness
+instance ToJSON JointPain
+instance FromJSON JointPain
+instance ToJSON Pump
+instance FromJSON Pump
+instance ToJSON Workload
+instance FromJSON Workload
+
+
 
 data PreExerciseFeedback = PreExerciseFeedback
   { soreness   :: Maybe Soreness
@@ -33,6 +45,23 @@ data PostExerciseFeedback = PostExerciseFeedback
   , pump       :: Maybe Pump
   , workload   :: Maybe Workload
   } deriving (Show, Eq, Generic)
+
+instance ToJSON PreExerciseFeedback
+instance FromJSON PreExerciseFeedback
+instance ToJSON PostExerciseFeedback
+instance FromJSON PostExerciseFeedback
+
+
+
+instance ToJSON Mesocycle
+instance FromJSON Mesocycle
+instance ToJSON MesocycleWeek
+instance FromJSON MesocycleWeek
+instance ToJSON MesocycleWorkout
+instance FromJSON MesocycleWorkout
+instance ToJSON MesocycleExercise
+instance FromJSON MesocycleExercise
+
 
 data Mesocycle = Mesocycle
   { numWeeks      :: Int

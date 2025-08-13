@@ -4,6 +4,10 @@ import Test.Hspec
 import Data.Time (UTCTime)
 import WorkoutLog
 import WorkoutLogOps
+import WorkoutLogPersistence (saveWorkoutLog, loadWorkoutLog)
+import System.Directory (removeFile, getTemporaryDirectory)
+import Data.Aeson (encode, decode)
+import qualified Data.ByteString.Lazy as BL
 
 spec :: Spec
 spec = do
@@ -37,3 +41,14 @@ spec = do
       let (nextWeight, nextReps) = suggestNextPrescriptionFromLog wlog "Push" "Squat" Nothing 2 2.5
       nextWeight `shouldBe` 0
       nextReps `shouldBe` 0
+
+  describe "WorkoutLogPersistence" $ do
+    it "round-trips a WorkoutLog to JSON and back" $ do
+      let set1 = SetLog { setWeekNumber = 1, setWorkoutName = "Push", setExerciseName = "Bench Press", setIndex = 1, prescribedWeight = Just 100, performedWeight = 100, prescribedReps = Just 10, performedReps = 10, setTimestamp = Nothing }
+          set2 = SetLog { setWeekNumber = 1, setWorkoutName = "Push", setExerciseName = "Bench Press", setIndex = 2, prescribedWeight = Just 100, performedWeight = 100, prescribedReps = Just 10, performedReps = 9, setTimestamp = Nothing }
+          wlog = WorkoutLog [set1, set2] []
+      path <- fmap (++ "/test_workoutlog.json") getTemporaryDirectory
+      saveWorkoutLog path wlog
+      loaded <- loadWorkoutLog path
+      removeFile path
+      loaded `shouldBe` Just wlog
