@@ -106,3 +106,18 @@ prescribedRIR week totalWeeks
   | week < totalWeeks = max 0 (3 - (week - 1))
   | week == totalWeeks = 8  -- deload week
   | otherwise = error "Week out of range for prescribedRIR"
+
+-- | Find the most recent completed set for a given exercise name.
+findMostRecentCompleted :: Mesocycle -> String -> Maybe MesocycleExercise
+findMostRecentCompleted (Mesocycle { weeks }) exName =
+  let allExercises = [ ex
+                     | w <- reverse weeks
+                     , wo <- reverse (workouts w)
+                     , ex <- reverse (exercises wo)
+                     , exerciseName ex == exName
+                     , performedSets ex /= Nothing
+                     , performedReps ex /= Nothing
+                     ]
+  in case allExercises of
+       (x:_) -> Just x
+       []    -> Nothing

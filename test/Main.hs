@@ -183,3 +183,84 @@ main = hspec $ do
     it "prescribes RIR 8 for deload week (week == totalWeeks)" $ do
       Mesocycle.prescribedRIR 4 4 `shouldBe` 8
 
+  describe "findMostRecentCompleted" $ do
+    it "finds the most recent completed set for an exercise" $ do
+      let ex1 = Mesocycle.MesocycleExercise
+            { Mesocycle.exerciseName = "Bench Press"
+            , Mesocycle.muscleGroup = WorkoutTemplate.Chest
+            , Mesocycle.prescribedSets = 3
+            , Mesocycle.performedSets = Just 3
+            , Mesocycle.prescribedReps = Just 10
+            , Mesocycle.performedReps = Just 10
+            , Mesocycle.preFeedback = Nothing
+            , Mesocycle.postFeedback = Nothing
+            }
+          ex2 = Mesocycle.MesocycleExercise
+            { Mesocycle.exerciseName = "Bench Press"
+            , Mesocycle.muscleGroup = WorkoutTemplate.Chest
+            , Mesocycle.prescribedSets = 3
+            , Mesocycle.performedSets = Just 3
+            , Mesocycle.prescribedReps = Just 12
+            , Mesocycle.performedReps = Just 12
+            , Mesocycle.preFeedback = Nothing
+            , Mesocycle.postFeedback = Nothing
+            }
+          ex3 = Mesocycle.MesocycleExercise
+            { Mesocycle.exerciseName = "Squat"
+            , Mesocycle.muscleGroup = WorkoutTemplate.Quads
+            , Mesocycle.prescribedSets = 4
+            , Mesocycle.performedSets = Just 4
+            , Mesocycle.prescribedReps = Just 8
+            , Mesocycle.performedReps = Just 8
+            , Mesocycle.preFeedback = Nothing
+            , Mesocycle.postFeedback = Nothing
+            }
+          workout1 = Mesocycle.MesocycleWorkout
+            { Mesocycle.workoutName = "Day 1"
+            , Mesocycle.exercises = [ex1, ex3]
+            }
+          workout2 = Mesocycle.MesocycleWorkout
+            { Mesocycle.workoutName = "Day 2"
+            , Mesocycle.exercises = [ex2]
+            }
+          week1 = Mesocycle.MesocycleWeek
+            { Mesocycle.weekNumber = 1
+            , Mesocycle.workouts = [workout1]
+            }
+          week2 = Mesocycle.MesocycleWeek
+            { Mesocycle.weekNumber = 2
+            , Mesocycle.workouts = [workout2]
+            }
+          meso = Mesocycle.Mesocycle
+            { Mesocycle.numWeeks = 2
+            , Mesocycle.weeks = [week1, week2]
+            }
+      Mesocycle.findMostRecentCompleted meso "Bench Press" `shouldBe` Just ex2
+      Mesocycle.findMostRecentCompleted meso "Squat" `shouldBe` Just ex3
+      Mesocycle.findMostRecentCompleted meso "Deadlift" `shouldBe` Nothing
+
+    it "ignores incomplete sets" $ do
+      let ex1 = Mesocycle.MesocycleExercise
+            { Mesocycle.exerciseName = "Bench Press"
+            , Mesocycle.muscleGroup = WorkoutTemplate.Chest
+            , Mesocycle.prescribedSets = 3
+            , Mesocycle.performedSets = Nothing
+            , Mesocycle.prescribedReps = Just 10
+            , Mesocycle.performedReps = Nothing
+            , Mesocycle.preFeedback = Nothing
+            , Mesocycle.postFeedback = Nothing
+            }
+          workout = Mesocycle.MesocycleWorkout
+            { Mesocycle.workoutName = "Day 1"
+            , Mesocycle.exercises = [ex1]
+            }
+          week = Mesocycle.MesocycleWeek
+            { Mesocycle.weekNumber = 1
+            , Mesocycle.workouts = [workout]
+            }
+          meso = Mesocycle.Mesocycle
+            { Mesocycle.numWeeks = 1
+            , Mesocycle.weeks = [week]
+            }
+      Mesocycle.findMostRecentCompleted meso "Bench Press" `shouldBe` Nothing
+
