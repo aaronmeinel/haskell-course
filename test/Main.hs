@@ -264,3 +264,13 @@ main = hspec $ do
             }
       Mesocycle.findMostRecentCompleted meso "Bench Press" `shouldBe` Nothing
 
+  describe "suggestNextPrescription (Double)" $ do
+    it "suggests a 2.5% increase from 100 as 102.5" $ do
+      Mesocycle.suggestNextPrescription 100 2.5 `shouldBe` 102.5
+    it "suggests a 5% increase from 200 as 210.0" $ do
+      Mesocycle.suggestNextPrescription 200 5 `shouldBe` 210.0
+    it "suggests a 0% increase returns the same value (Double)" $ do
+      Mesocycle.suggestNextPrescription 150 0 `shouldBe` 150.0
+    it "can be used for reps by rounding to Int" $ do
+      round (Mesocycle.suggestNextPrescription 99 2.5) `shouldBe` 101
+

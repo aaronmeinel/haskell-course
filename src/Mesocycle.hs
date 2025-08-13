@@ -121,3 +121,14 @@ findMostRecentCompleted (Mesocycle { weeks }) exName =
   in case allExercises of
        (x:_) -> Just x
        []    -> Nothing
+
+
+
+-- | Suggest the next prescription (e.g., reps or weight) based on previous value and a progression percentage.
+--   For reps, round as needed. For weight, use roundToStep.
+suggestNextPrescription :: Double -> Double -> Double
+suggestNextPrescription prevValue percent =
+  let increase = prevValue * (percent / 100)
+  in prevValue + increase
+
+-- | Round a value to the nearest step (e.g., 1.25 for kg plates)
