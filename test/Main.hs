@@ -110,3 +110,64 @@ main = hspec $ do
       removeFile path
       loaded `shouldBe` Just meso
 
+  describe "findNextActiveExercise" $ do
+    it "finds the first exercise needing input" $ do
+      let ex1 = Mesocycle.MesocycleExercise
+            { Mesocycle.exerciseName = "Bench Press"
+            , Mesocycle.muscleGroup = WorkoutTemplate.Chest
+            , Mesocycle.prescribedSets = 3
+            , Mesocycle.performedSets = Just 3
+            , Mesocycle.prescribedReps = Just 10
+            , Mesocycle.performedReps = Just 10
+            , Mesocycle.preFeedback = Nothing
+            , Mesocycle.postFeedback = Nothing
+            }
+          ex2 = Mesocycle.MesocycleExercise
+            { Mesocycle.exerciseName = "Squat"
+            , Mesocycle.muscleGroup = WorkoutTemplate.Quads
+            , Mesocycle.prescribedSets = 4
+            , Mesocycle.performedSets = Nothing
+            , Mesocycle.prescribedReps = Just 8
+            , Mesocycle.performedReps = Nothing
+            , Mesocycle.preFeedback = Nothing
+            , Mesocycle.postFeedback = Nothing
+            }
+          workout = Mesocycle.MesocycleWorkout
+            { Mesocycle.workoutName = "Day 1"
+            , Mesocycle.exercises = [ex1, ex2]
+            }
+          week = Mesocycle.MesocycleWeek
+            { Mesocycle.weekNumber = 1
+            , Mesocycle.workouts = [workout]
+            }
+          meso = Mesocycle.Mesocycle
+            { Mesocycle.numWeeks = 1
+            , Mesocycle.weeks = [week]
+            }
+      Mesocycle.findNextActiveExercise meso `shouldBe` Just (1, "Day 1", ex2)
+
+    it "returns Nothing if all exercises are complete" $ do
+      let ex1 = Mesocycle.MesocycleExercise
+            { Mesocycle.exerciseName = "Bench Press"
+            , Mesocycle.muscleGroup = WorkoutTemplate.Chest
+            , Mesocycle.prescribedSets = 3
+            , Mesocycle.performedSets = Just 3
+            , Mesocycle.prescribedReps = Just 10
+            , Mesocycle.performedReps = Just 10
+            , Mesocycle.preFeedback = Nothing
+            , Mesocycle.postFeedback = Nothing
+            }
+          workout = Mesocycle.MesocycleWorkout
+            { Mesocycle.workoutName = "Day 1"
+            , Mesocycle.exercises = [ex1]
+            }
+          week = Mesocycle.MesocycleWeek
+            { Mesocycle.weekNumber = 1
+            , Mesocycle.workouts = [workout]
+            }
+          meso = Mesocycle.Mesocycle
+            { Mesocycle.numWeeks = 1
+            , Mesocycle.weeks = [week]
+            }
+      Mesocycle.findNextActiveExercise meso `shouldBe` Nothing
+

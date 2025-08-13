@@ -1,7 +1,9 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE NamedFieldPuns #-}
 module Mesocycle where
 
 import GHC.Generics (Generic)
+import Data.List (find)
 
 import qualified WorkoutTemplate
 
@@ -83,3 +85,17 @@ generateMesocycle mesocycleTemplate weeksCount =
             , preFeedback = Nothing
             , postFeedback = Nothing
             }
+
+
+
+-- | Find the next exercise that needs to be performed/logged.
+-- Returns (weekNumber, workoutName, exercise)
+findNextActiveExercise :: Mesocycle -> Maybe (Int, String, MesocycleExercise)
+findNextActiveExercise (Mesocycle { weeks }) = find needsInput allExercises
+  where
+    allExercises = [ (weekNumber w, workoutName wo, ex)
+                   | w <- weeks
+                   , wo <- workouts w
+                   , ex <- exercises wo
+                   ]
+    needsInput (_, _, ex) = performedSets ex == Nothing || performedReps ex == Nothing
