@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE DeriveGeneric #-}
 module WorkoutTemplate (
   WorkoutTemplate(..),
   Workout(..),
@@ -8,12 +9,16 @@ module WorkoutTemplate (
 ) where
 
 import Data.Yaml
+import Data.Aeson (ToJSON, FromJSON, toJSON, parseJSON, withText, withObject, (.:))
+import GHC.Generics (Generic)
 import qualified Data.Text as T
 
 -- Represents a muscle group, e.g., Chest, Back, Hamstrings
 -- ...existing code...
 data MuscleGroup = Chest | Back | Hamstrings | Quads | Shoulders | Arms | Calves | Abs
-  deriving (Show, Read, Eq)
+  deriving (Show, Read, Eq, Generic)
+
+instance ToJSON MuscleGroup
 
 instance FromJSON MuscleGroup where
   parseJSON = withText "MuscleGroup" $ \t -> case T.unpack t of
@@ -32,7 +37,9 @@ data Exercise = Exercise
   { exerciseName   :: String
   , muscleGroup    :: MuscleGroup
   , initialSets    :: Int
-} deriving (Show, Eq)
+} deriving (Show, Eq, Generic)
+
+instance ToJSON Exercise
 
 instance FromJSON Exercise where
   parseJSON = withObject "Exercise" $ \v -> Exercise
@@ -44,7 +51,9 @@ instance FromJSON Exercise where
 data Workout = Workout
   { workoutName    :: String
   , exercises      :: [Exercise]
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON Workout
 
 instance FromJSON Workout where
   parseJSON = withObject "Workout" $ \v -> Workout
@@ -52,9 +61,11 @@ instance FromJSON Workout where
     <*> v .: "exercises"
 
 -- Represents a template for a week of workouts
-data WorkoutTemplate = WorkoutTemplate
+newtype WorkoutTemplate = WorkoutTemplate
   { weekDays       :: [Workout]  -- Each workout assigned to a day
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON WorkoutTemplate
 
 instance FromJSON WorkoutTemplate where
   parseJSON :: Value -> Parser WorkoutTemplate

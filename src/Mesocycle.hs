@@ -1,54 +1,85 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Mesocycle where
 
-import WorkoutTemplate
+import GHC.Generics (Generic)
+
+import qualified WorkoutTemplate
+
 
 -- Enum types for feedback
 
 data Soreness = NeverSore | HealedAWhileAgo | HealedJustInTime | StillSore
-  deriving (Show, Eq, Enum)
+  deriving (Show, Eq, Enum, Generic)
 
 data JointPain = NoPain | LowPain | ModeratePain | HighPain
-  deriving (Show, Eq, Enum)
+  deriving (Show, Eq, Enum, Generic)
 
 data Pump = LowPump | ModeratePump | AmazingPump
-  deriving (Show, Eq, Enum)
+  deriving (Show, Eq, Enum, Generic)
 
 data Workload = Easy | PrettyGood | PushedLimits | TooMuch
-  deriving (Show, Eq, Enum)
+  deriving (Show, Eq, Enum, Generic)
 
 -- Updated feedback types
 
 data PreExerciseFeedback = PreExerciseFeedback
   { soreness   :: Maybe Soreness
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
 
 data PostExerciseFeedback = PostExerciseFeedback
   { jointPain  :: Maybe JointPain
   , pump       :: Maybe Pump
   , workload   :: Maybe Workload
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
 
 data Mesocycle = Mesocycle
-  { template      :: WorkoutTemplate
-  , numWeeks      :: Int
+  { numWeeks      :: Int
   , weeks         :: [MesocycleWeek]
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
 
 data MesocycleWeek = MesocycleWeek
   { weekNumber    :: Int
   , workouts      :: [MesocycleWorkout]
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
 
 data MesocycleWorkout = MesocycleWorkout
   { workoutName   :: String
   , exercises     :: [MesocycleExercise]
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
 
 data MesocycleExercise = MesocycleExercise
   { exerciseName     :: String
-  , muscleGroup      :: MuscleGroup
+  , muscleGroup      :: WorkoutTemplate.MuscleGroup
   , prescribedSets   :: Int
+  , performedSets    :: Maybe Int
   , prescribedReps   :: Maybe Int
+  , performedReps    :: Maybe Int
   , preFeedback      :: Maybe PreExerciseFeedback
   , postFeedback     :: Maybe PostExerciseFeedback
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+
+
+generateMesocycle :: WorkoutTemplate.WorkoutTemplate -> Int -> Mesocycle
+generateMesocycle mesocycleTemplate weeksCount = 
+  Mesocycle
+  { numWeeks = weeksCount
+  , weeks = [ MesocycleWeek n (map toMesocycleWorkout (WorkoutTemplate.weekDays mesocycleTemplate)) | n <- [1..weeksCount] ]
+  } -- For each weekday, create a Workout, based on the template
+    where
+        toMesocycleWorkout :: WorkoutTemplate.Workout -> MesocycleWorkout
+        toMesocycleWorkout (WorkoutTemplate.Workout name templateExercises) = MesocycleWorkout
+            { workoutName = name
+            , exercises = map toMesocycleExercise templateExercises
+            }
+
+        toMesocycleExercise :: WorkoutTemplate.Exercise -> MesocycleExercise
+        toMesocycleExercise (WorkoutTemplate.Exercise name targetMuscleGroup sets) = MesocycleExercise
+            { exerciseName = name
+            , muscleGroup = targetMuscleGroup
+            , prescribedSets = sets
+            , performedSets = Nothing
+            , prescribedReps = Nothing
+            , performedReps = Nothing
+            , preFeedback = Nothing
+            , postFeedback = Nothing
+            }

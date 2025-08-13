@@ -58,7 +58,9 @@ library
     import:           warnings
 
     -- Modules exported by the library.
-    exposed-modules:  WorkoutTemplate, Mesocycle
+    exposed-modules:  WorkoutTemplate
+                    , Mesocycle
+                    , MesocyclePersistence
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -72,6 +74,7 @@ library
         , yaml
         , aeson
         , text
+        , bytestring
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -112,9 +115,11 @@ test-suite haskell-course-test
     hs-source-dirs:   test
     build-depends:
         base ^>=4.18.3.0
-        , haskell-course
+        , hspec
         , yaml
         , aeson
         , text
-        , hspec
+        , directory
+        , haskell-course
+
     main-is:          Main.hs
