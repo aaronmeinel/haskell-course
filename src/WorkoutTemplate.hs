@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE InstanceSigs #-}
 module WorkoutTemplate (
   WorkoutTemplate(..),
   Workout(..),
@@ -7,7 +8,6 @@ module WorkoutTemplate (
 ) where
 
 import Data.Yaml
-import Data.Aeson (FromJSON(..), withObject, withText, (.:))
 import qualified Data.Text as T
 
 -- Represents a muscle group, e.g., Chest, Back, Hamstrings
@@ -57,5 +57,6 @@ data WorkoutTemplate = WorkoutTemplate
   } deriving (Show, Eq)
 
 instance FromJSON WorkoutTemplate where
+  parseJSON :: Value -> Parser WorkoutTemplate
   parseJSON = withObject "WorkoutTemplate" $ \v -> WorkoutTemplate
     <$> v .: "week_days"
