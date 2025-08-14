@@ -4,11 +4,53 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Workout Tracker</title>
-    <link rel="stylesheet" href="/styles.css" />
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      window.tailwind_config = {
+        theme: {
+          extend: {
+            fontFamily: { inter: ['Inter', 'system-ui', 'sans-serif'] },
+            colors: {
+              brand: {
+                50: '#ecfeff',
+                100: '#cffafe',
+                200: '#a5f3fc',
+                300: '#67e8f9',
+                400: '#22d3ee',
+                500: '#06b6d4',
+                600: '#0891b2',
+                700: '#0e7490',
+                800: '#155e75',
+                900: '#164e63'
+              }
+            }
+          }
+        }
+      }
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      body { font-family: 'Inter', system-ui, sans-serif; }
+      /* Subtle noise / gradient layering */
+      .app-bg { position:relative; }
+      .app-bg:before { content:""; position:fixed; inset:0; background:radial-gradient(circle at 25% 20%,rgba(56,189,248,.15),transparent 60%), radial-gradient(circle at 80% 70%,rgba(139,92,246,.12),transparent 65%), linear-gradient(130deg,#020617,#0f172a,#020617); z-index:-2; }
+      .app-bg:after { content:""; position:fixed; inset:0; backdrop-filter:blur(18px) saturate(130%); background:rgba(2,8,23,0.35); z-index:-1; }
+    </style>
   </head>
-  <body>
-    <header><h1>Workout Plan</h1></header>
-    <div id="root" class="container"></div>
+  <body class="app-bg text-gray-100 min-h-screen antialiased font-inter selection:bg-brand-400/30 selection:text-brand-100">
+    <header class="backdrop-blur supports-[backdrop-filter]:bg-slate-900/50 bg-slate-900/80 border-b border-white/10 px-6 py-4 flex items-center gap-4 sticky top-0 z-20">
+      <div class="h-9 w-9 grid place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-violet-600 shadow ring-1 ring-white/20">
+        <span class="text-lg font-semibold">💪</span>
+      </div>
+      <div>
+        <h1 class="text-lg md:text-xl font-semibold tracking-wide leading-tight">Workout Plan</h1>
+        <p class="text-xs md:text-sm text-slate-400">Adaptive training cycle preview</p>
+      </div>
+    </header>
+    <div id="root" class="max-w-7xl mx-auto px-6 py-10"></div>
     <script src="/elm.js"></script>
     <script>
       var app = Elm.Main.init({ node: document.getElementById('root') });
