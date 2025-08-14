@@ -61,6 +61,9 @@ library
     exposed-modules:  WorkoutTemplate
                     , Mesocycle
                     , MesocyclePersistence
+                    , Api.Types
+                    , Api.Routes
+                    , Api.Server
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -70,11 +73,16 @@ library
 
     -- Other library packages from which modules are imported.
     build-depends:
-        base ^>=4.18.3.0
-        , yaml
-        , aeson
-        , text
-        , bytestring
+        base ^>=4.18.3.0,
+        yaml,
+        aeson,
+        text,
+        bytestring,
+        servant,
+        servant-server,
+        warp,
+        wai,
+        wai-cors
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -98,7 +106,12 @@ executable haskell-course
     -- Other library packages from which modules are imported.
     build-depends:
         base ^>=4.18.3.0,
-        haskell-course
+        haskell-course,
+        servant,
+        servant-server,
+        warp,
+        wai,
+        wai-cors
 
     -- Directories containing source files.
     hs-source-dirs:   app
