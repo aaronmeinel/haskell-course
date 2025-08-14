@@ -1,1 +1,28 @@
-dist-newstyle/*
+# Cabal build artifacts
+dist-newstyle/
+
+# Local Elm binary & bootstrap artifacts
+.elm-bin/
+frontend/elm-stuff/
+frontend/.elm-deps-ok
+
+# Elm build output (entire dist directory is generated now)
+dist/
+
+# OS/editor junk
+*.swp
+*.swo
+*.DS_Store
+*.tmp
+*~
+
+# Haskell tooling
+.ghc.environment.*
+cabal.project.local
+cabal.project.local~
+
+# Node placeholder (if ever accidentally added)
+node_modules/
+
+# Logs
+*.log
