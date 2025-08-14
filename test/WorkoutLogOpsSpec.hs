@@ -52,3 +52,9 @@ spec = do
       loaded <- loadWorkoutLog path
       removeFile path
       loaded `shouldBe` Just wlog
+    it "returns Nothing if file does not exist" $ do
+      path <- fmap (++ "/nonexistent_workoutlog.json") getTemporaryDirectory
+      loaded <- loadWorkoutLog path
+      loaded `shouldBe` Nothing
+
+  

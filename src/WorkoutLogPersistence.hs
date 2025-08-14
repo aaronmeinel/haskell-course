@@ -5,6 +5,7 @@ import GHC.Generics (Generic)
 import Data.Aeson (ToJSON, FromJSON, encode, decode)
 import qualified Data.ByteString.Lazy as BL
 import WorkoutLog
+import System.Directory (doesFileExist)
 
 instance ToJSON SetLog
 instance FromJSON SetLog
@@ -20,5 +21,9 @@ saveWorkoutLog path logData = BL.writeFile path (encode logData)
 -- | Load a WorkoutLog from a JSON file
 loadWorkoutLog :: FilePath -> IO (Maybe WorkoutLog)
 loadWorkoutLog path = do
-  content <- BL.readFile path
-  return (decode content)
+  exists <- doesFileExist path
+  if not exists
+    then return Nothing
+    else do
+      content <- BL.readFile path
+      return (decode content)
