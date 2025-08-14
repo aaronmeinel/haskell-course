@@ -111,7 +111,8 @@ executable haskell-course
         servant-server,
         warp,
         wai,
-        wai-cors
+        wai-cors,
+        process
 
     -- Directories containing source files.
     hs-source-dirs:   app

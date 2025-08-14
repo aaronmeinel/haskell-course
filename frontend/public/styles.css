@@ -1,0 +1,18 @@
+/* Basic dark theme styling for workout plan */
+* { box-sizing: border-box; }
+body { margin:0; font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,sans-serif; background:#0d1117; color:#e6edf3; line-height:1.4; }
+header { padding:1rem 1.25rem; background:linear-gradient(120deg,#1f6feb,#8250df); color:#fff; }
+header h1 { margin:0; font-size:1.4rem; letter-spacing:.5px; }
+.container { max-width:900px; margin:0 auto; padding:1rem 1.25rem 2.5rem; }
+.plan-list { list-style:none; margin:0; padding:0; display:grid; gap:1.25rem; }
+.week-header { font-size:1.1rem; font-weight:600; margin-bottom:.35rem; color:#ffa657; }
+.workout { list-style:none; margin:0; background:#161b22; border:1px solid #30363d; border-radius:10px; padding:0.75rem 1rem 0.6rem; box-shadow:0 2px 4px rgba(0,0,0,.4); transition: border-color .15s, transform .15s; }
+.workout:hover { border-color:#3b82f6; transform:translateY(-2px); }
+.workout > span.title { display:block; font-weight:600; font-size:1rem; margin-bottom:.4rem; color:#58a6ff; }
+.workout ul { list-style:none; margin:0; padding:0; display:flex; flex-wrap:wrap; gap:.35rem .75rem; }
+.exercise { background:#1f242d; padding:.35rem .6rem; border-radius:6px; font-size:.8rem; border:1px solid #30363d; display:inline-block; white-space:nowrap; }
+.exercise:hover { background:#242c36; }
+.muted { color:#8b949e; }
+.error-box { background:#2d1417; border:1px solid #f85149; color:#ffb4b4; padding:.75rem 1rem; border-radius:8px; }
+.loading { color:#8b949e; font-style:italic; }
+@media (max-width:640px){ .plan-list { grid-template-columns:1fr; } .workout { padding:0.75rem .85rem 0.6rem; } }

@@ -1,7 +1,9 @@
 module Main exposing (main)
 
 import Browser
-import Html exposing (Html, div, h1, text, ul, li)
+import Platform.Sub as Sub
+import Html exposing (Html, div, h1, text, ul, li, span)
+import Html.Attributes exposing (class)
 import Http
 import Json.Decode as D
 
@@ -99,35 +101,32 @@ view : Model -> Html Msg
 view model =
     case model of
         Loading ->
-            div [] [ h1 [] [ text "Loading plan..." ] ]
+            div [ class "loading" ] [ text "Loading plan..." ]
 
         Failure e ->
-            div [] [ h1 [] [ text "Error" ], div [] [ text e ] ]
+            div [ class "error-box" ] [ text e ]
 
         Loaded plan ->
-            div []
-                [ h1 [] [ text "Workout Plan" ]
-                , ul [] (List.concatMap viewWeek plan.weeks)
-                ]
+            ul [ class "plan-list" ] (List.concatMap viewWeek plan.weeks)
 
 viewWeek : Week -> List (Html msg)
 viewWeek week =
     let
-        header = li [] [ text ("Week " ++ String.fromInt week.weekNumber) ]
+        header = li [ class "week-header" ] [ text ("Week " ++ String.fromInt week.weekNumber) ]
         workouts = List.map viewWorkout week.workouts
     in
     header :: workouts
 
 viewWorkout : Workout -> Html msg
 viewWorkout w =
-    li []
-        [ text w.workoutName
+    li [ class "workout" ]
+        [ span [ class "title" ] [ text w.workoutName ]
         , ul [] (List.map viewExercise w.exercises)
         ]
 
 viewExercise : Exercise -> Html msg
 viewExercise ex =
-    li [] [ text (ex.exerciseName ++ " (" ++ ex.muscleGroup ++ ") sets: " ++ String.fromInt ex.prescribedSets) ]
+    li [ class "exercise" ] [ text (ex.exerciseName ++ " · sets " ++ String.fromInt ex.prescribedSets) ]
 
 
 main : Program () Model Msg
@@ -144,8 +143,17 @@ main =
 debugHttp : Http.Error -> String
 debugHttp err =
     case err of
-        Http.BadUrl u -> "BadUrl: " ++ u
-        Http.Timeout -> "Timeout"
-        Http.NetworkError -> "NetworkError"
-        Http.BadStatus r -> "BadStatus: " ++ String.fromInt r.status.code
-        Http.BadBody m -> "BadBody: " ++ m
+        Http.BadUrl u ->
+            "BadUrl: " ++ u
+
+        Http.Timeout ->
+            "Timeout"
+
+        Http.NetworkError ->
+            "NetworkError"
+
+        Http.BadStatus statusCode ->
+            "BadStatus: " ++ String.fromInt statusCode
+
+        Http.BadBody m ->
+            "BadBody: " ++ m

@@ -9,6 +9,9 @@ import Api.Routes
 import Api.Types
 import qualified Mesocycle
 import qualified WorkoutTemplate
+import Servant.API.Raw
+import Servant.Server
+import Servant.Server.StaticFiles (serveDirectoryFileServer)
 
 -- For now we generate a trivial plan each server start.
 -- Later: load from file or configuration.
@@ -43,11 +46,17 @@ plan = Mesocycle.generateMesocycle sampleTemplate 4
           ]
       }
 
-server :: Server RootAPI
-server = versionH :<|> planH
+-- Extend API with static file serving at root
+type FullAPI = RootAPI :<|> Raw
+
+serverRoot :: Server RootAPI
+serverRoot = versionH :<|> planH
   where
     versionH = pure (VersionResponse 1)
     planH = pure (fromDomainPlan plan)
 
+server :: Server FullAPI
+server = serverRoot :<|> serveDirectoryFileServer "dist"
+
 app :: Application
-app = simpleCors $ serve (Proxy :: Proxy RootAPI) server
+app = simpleCors $ serve (Proxy :: Proxy FullAPI) server
