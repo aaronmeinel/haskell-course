@@ -1,23 +1,57 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
 {-# LANGUAGE DuplicateRecordFields #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Api.Types where
 
 import GHC.Generics (Generic)
-import Data.Aeson (ToJSON, FromJSON)
+import Data.Aeson (ToJSON(..), FromJSON(..), (.=), (.:), withObject, object)
 import qualified Mesocycle as Domain
-import qualified WorkoutTemplate
+import qualified WorkoutTemplate ()
+-- (ToJSON already imported above)
+
+-- Version response type (moved here for central export)
+newtype VersionResponse = VersionResponse { apiVersion :: Int }
+  deriving (Eq, Show, Generic, ToJSON)
 -- (no extra imports needed currently)
 
 -- Logging DTOs
-data SetLogRequest = SetLogRequest
+data ExerciseLogRequest = ExerciseLogRequest
   { week :: Int
   , workoutIndex :: Int
   , exerciseIndex :: Int
-  , setIndex :: Int
-  , loggedWeight :: Maybe Double
-  , loggedReps :: Maybe Int
+  , loggedSets :: Int
+  , loggedReps :: Int
   } deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
+-- Log a single set (weight + reps) within an exercise
+data SetLogRequest = SetLogRequest
+  { setWeek :: Int
+  , setWorkoutIndex :: Int
+  , setExerciseIndex :: Int
+  , setIndex :: Int -- 0-based from frontend
+  , loggedWeight :: Double
+  , setLoggedReps :: Int
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON SetLogRequest where
+  toJSON r = object
+    [ "week" .= setWeek r
+    , "workoutIndex" .= setWorkoutIndex r
+    , "exerciseIndex" .= setExerciseIndex r
+    , "setIndex" .= setIndex r
+    , "loggedWeight" .= loggedWeight r
+    , "loggedReps" .= setLoggedReps r
+    ]
+
+instance FromJSON SetLogRequest where
+  parseJSON = withObject "SetLogRequest" $ \o -> SetLogRequest
+      <$> o .: "week"
+      <*> o .: "workoutIndex"
+      <*> o .: "exerciseIndex"
+      <*> o .: "setIndex"
+      <*> o .: "loggedWeight"
+      <*> o .: "loggedReps"
 
 data LogResponse = LogResponse
   { updated :: Bool
@@ -28,17 +62,19 @@ data LogResponse = LogResponse
 -- If later we need custom mapping we can adjust.
 
 -- DTOs intentionally exclude performed* and feedback fields 
-data SetDTO = SetDTO
-  { weight :: Maybe Double
-  , reps :: Maybe Int
-  } deriving (Show, Eq, Generic, ToJSON, FromJSON)
-
 data ExerciseDTO = ExerciseDTO
   { exerciseName :: String
   , muscleGroup :: String
   , prescribedSets :: Int
   , prescribedReps :: Maybe Int
-  , sets :: [SetDTO]
+  , performedSets :: Maybe Int
+  , performedReps :: Maybe Int
+  , sets :: [SetPerfDTO]
+  } deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
+data SetPerfDTO = SetPerfDTO
+  { weight :: Maybe Double
+  , reps :: Maybe Int
   } deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
 data WorkoutDTO = WorkoutDTO
@@ -64,10 +100,13 @@ fromDomainExercise ex = ExerciseDTO
   , muscleGroup = show (Domain.muscleGroup ex)
   , prescribedSets = Domain.prescribedSets ex
   , prescribedReps = Domain.prescribedReps ex
-  , sets = map toSet (Domain.sets ex)
+  , performedSets = Domain.performedSets ex
+  , performedReps = Domain.performedReps ex
+  , sets = map fromDomainSet (Domain.setPerformances ex)
   }
-  where
-    toSet sp = SetDTO { weight = Domain.weight sp, reps = Domain.reps sp }
+
+fromDomainSet :: Domain.SetPerformance -> SetPerfDTO
+fromDomainSet sp = SetPerfDTO { weight = Domain.weight sp, reps = Domain.reps sp }
 
 fromDomainWorkout :: Domain.MesocycleWorkout -> WorkoutDTO
 fromDomainWorkout w = WorkoutDTO

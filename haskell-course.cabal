@@ -72,17 +72,17 @@ library
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:
-        base ^>=4.18.3.0,
-        yaml,
-        aeson,
-        text,
-        bytestring,
-        servant,
-        servant-server,
-        warp,
-        wai,
-        wai-cors
+    build-depends: base ^>=4.18.3.0,
+                   yaml,
+                   aeson,
+                   text,
+                   bytestring,
+                   directory,
+                   servant,
+                   servant-server,
+                   warp,
+                   wai,
+                   wai-cors
 
     -- Directories containing source files.
     hs-source-dirs:   src
@@ -104,15 +104,15 @@ executable haskell-course
     -- other-extensions:
 
     -- Other library packages from which modules are imported.
-    build-depends:
-        base ^>=4.18.3.0,
-        haskell-course,
-        servant,
-        servant-server,
-        warp,
-        wai,
-        wai-cors,
-        process
+    build-depends: base ^>=4.18.3.0,
+                   haskell-course,
+                   servant,
+                   servant-server,
+                   warp,
+                   wai,
+                   wai-cors,
+                   directory,
+                   process
 
     -- Directories containing source files.
     hs-source-dirs:   app

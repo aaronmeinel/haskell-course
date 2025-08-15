@@ -5,22 +5,45 @@ module Api.Server (app) where
 import Servant
 import Network.Wai (Application)
 import Network.Wai.Middleware.Cors (simpleCors)
-import Api.Routes (RootAPI, VersionResponse(..))
-import Api.Types as T
+import Api.Routes
+import Api.Types ( ExerciseLogRequest(..)
+                 , SetLogRequest(..)
+                 , LogResponse(..)
+                 , PlanDTO(..)
+                 , VersionResponse(..)
+                 , fromDomainPlan
+                 )
 import qualified Mesocycle
 import qualified WorkoutTemplate
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
 import Servant.Server.StaticFiles (serveDirectoryFileServer)
 import Control.Monad.IO.Class (liftIO)
+import qualified MesocyclePersistence
+import System.Directory (doesFileExist, createDirectoryIfMissing)
+import Control.Exception (catch, IOException)
 
--- For now we generate a trivial plan each server start.
--- Later: load from file or configuration.
 
--- Global in-memory mutable mesocycle (simple dev prototype; not for production)
 {-# NOINLINE globalPlanRef #-}
 globalPlanRef :: IORef Mesocycle.Mesocycle
-globalPlanRef = unsafePerformIO (newIORef initialPlan)
+globalPlanRef = unsafePerformIO (do
+  createDirectoryIfMissing True dataDir
+  exists <- doesFileExist persistFile
+  plan <- if exists
+            then do
+              m <- MesocyclePersistence.loadMesocycle persistFile `catch` handleLoad
+              case m of
+                Just p -> pure p
+                Nothing -> do
+                  MesocyclePersistence.saveMesocycle persistFile initialPlan
+                  pure initialPlan
+            else do
+              MesocyclePersistence.saveMesocycle persistFile initialPlan
+              pure initialPlan
+  newIORef plan)
+  where
+    handleLoad :: IOException -> IO (Maybe Mesocycle.Mesocycle)
+    handleLoad _ = pure Nothing
 
 initialPlan :: Mesocycle.Mesocycle
 initialPlan = Mesocycle.generateMesocycle sampleTemplate 4
@@ -52,19 +75,23 @@ initialPlan = Mesocycle.generateMesocycle sampleTemplate 4
           ]
       }
 
--- Extend API with static file serving at root
 type FullAPI = RootAPI :<|> Raw
 
 serverRoot :: Server RootAPI
-serverRoot = versionH :<|> planH :<|> logSetH
+serverRoot = versionH :<|> planH :<|> logH :<|> logSetH
   where
     versionH = pure (VersionResponse 1)
     planH = do
       p <- liftIO (readIORef globalPlanRef)
-      pure (T.fromDomainPlan p)
-    logSetH req = do
-      _ <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> (applySetLog req p, ()))
-      pure (T.LogResponse True "Set logged")
+      pure (fromDomainPlan p)
+    logH req = do
+      updated <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> let p' = applyLog req p in (p', p'))
+      liftIO $ MesocyclePersistence.saveMesocycle persistFile updated
+      pure (LogResponse True "Logged")
+    logSetH sreq = do
+      updated <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> let p' = applySetLog sreq p in (p', p'))
+      liftIO $ MesocyclePersistence.saveMesocycle persistFile updated
+      pure (LogResponse True "Set Logged")
 
 server :: Server FullAPI
 server = serverRoot :<|> serveDirectoryFileServer "dist"
@@ -72,22 +99,71 @@ server = serverRoot :<|> serveDirectoryFileServer "dist"
 app :: Application
 app = simpleCors $ serve (Proxy :: Proxy FullAPI) server
 
--- Apply a SetLogRequest to a Mesocycle (update a single set within an exercise)
-applySetLog :: T.SetLogRequest -> Mesocycle.Mesocycle -> Mesocycle.Mesocycle
-applySetLog req m = m { Mesocycle.weeks = map updateWeek (Mesocycle.weeks m) }
+applyLog :: ExerciseLogRequest -> Mesocycle.Mesocycle -> Mesocycle.Mesocycle
+applyLog req@ExerciseLogRequest
+  { week = wk
+  , workoutIndex = wIx
+  , exerciseIndex = eIx
+  , loggedSets = ls
+  , loggedReps = lr
+  } m =
+  m { Mesocycle.weeks = map updateWeek (Mesocycle.weeks m) }
   where
     updateWeek w
-      | Mesocycle.weekNumber w /= T.week req = w
+      | Mesocycle.weekNumber w /= wk = w
       | otherwise = w { Mesocycle.workouts = mapWithIndex updateWorkout (Mesocycle.workouts w) }
+
     updateWorkout i wo
-      | i /= T.workoutIndex req = wo
+      | i /= wIx = wo
       | otherwise = wo { Mesocycle.exercises = mapWithIndex updateExercise (Mesocycle.exercises wo) }
+
     updateExercise j ex
-      | j /= T.exerciseIndex req = ex
-      | otherwise = ex { Mesocycle.sets = mapWithIndex updateSet (Mesocycle.sets ex) }
-    updateSet k setPerf
-      | k /= T.setIndex req = setPerf
-      | otherwise =
-          let T.SetLogRequest{ T.loggedWeight = wVal, T.loggedReps = rVal } = req
-          in setPerf { Mesocycle.weight = wVal, Mesocycle.reps = rVal }
+      | j /= eIx = ex
+      | otherwise = ex { Mesocycle.performedSets = Just ls
+                       , Mesocycle.performedReps = Just lr }
+
     mapWithIndex f = zipWith f [0..]
+
+-- Set-level logging: update a single set's performance (weight & reps)
+applySetLog :: SetLogRequest -> Mesocycle.Mesocycle -> Mesocycle.Mesocycle
+applySetLog SetLogRequest
+  { setWeek = sw
+  , setWorkoutIndex = swIx
+  , setExerciseIndex = seIx
+  , setIndex = sIdx
+  , loggedWeight = lw
+  , setLoggedReps = setLR
+  } m =
+  m { Mesocycle.weeks = map updateWeek (Mesocycle.weeks m) }
+  where
+    updateWeek w
+      | Mesocycle.weekNumber w /= sw = w
+      | otherwise = w { Mesocycle.workouts = mapWithIndex updateWorkout (Mesocycle.workouts w) }
+
+    updateWorkout i wo
+      | i /= swIx = wo
+      | otherwise = wo { Mesocycle.exercises = mapWithIndex updateExercise (Mesocycle.exercises wo) }
+
+    updateExercise j ex
+      | j /= seIx = ex
+      | otherwise =
+          let
+            upd k sp
+              | k == sIdx = sp { Mesocycle.weight = Just lw
+                               , Mesocycle.reps   = Just setLR }
+              | otherwise = sp
+            newSets = zipWith upd [0..] (Mesocycle.setPerformances ex)
+            performedSets' = Just (length (filter (\sp -> Mesocycle.weight sp /= Nothing && Mesocycle.reps sp /= Nothing) newSets))
+          in ex { Mesocycle.setPerformances = newSets
+                , Mesocycle.performedSets   = performedSets'
+                }
+
+    mapWithIndex f = zipWith f [0..]
+
+-- Persistence file paths
+dataDir :: FilePath
+dataDir = "data"
+
+
+persistFile :: FilePath
+persistFile = dataDir ++ "/mesocycle.json"

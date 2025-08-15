@@ -93,6 +93,7 @@ type alias SetInput =
     { weight : String
     , reps : String
     , logged : Bool
+    , editing : Bool
     }
 
 -- We store per-set input state in a dictionary keyed by weekIdx:workoutIdx:exerciseIdx:setIdx
@@ -134,6 +135,8 @@ type Msg
     | EditSetReps Int Int String
     | LogSet Int Int
     | LoggedSet Int Int (Result Http.Error ())
+    | StartEditSet Int Int
+    | CancelEditSet Int Int
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -180,6 +183,20 @@ update msg model =
                     , postSetLog exIdx setIdx body
                     )
                 _ -> ( model, Cmd.none )
+
+        StartEditSet exIdx setIdx ->
+            let
+                key = inputKey model.currentWeekIndex model.currentWorkoutIndex exIdx setIdx
+                updated = Dict.update key (\m -> Just (setEditingUpdate True m)) model.inputs
+            in
+            ( { model | inputs = updated }, Cmd.none )
+
+        CancelEditSet exIdx setIdx ->
+            let
+                key = inputKey model.currentWeekIndex model.currentWorkoutIndex exIdx setIdx
+                updated = Dict.update key (\m -> Just (setEditingUpdate False m)) model.inputs
+            in
+            ( { model | inputs = updated }, Cmd.none )
 
         LoggedSet exIdx setIdx (Ok _) ->
             let
@@ -288,36 +305,6 @@ getWorkout wIdx wkIdx plan =
                 [] -> Nothing
         [] -> Nothing
 
--- Find the first (weekIdx, workoutIdx) where at least one exercise not fully logged.
-findFirstIncomplete : Plan -> ( Int, Int )
-findFirstIncomplete plan =
-    let
-        isLogged : Exercise -> Bool
-        isLogged ex =
-            case ex.sets of
-                [] -> False
-                ss -> List.all (\s -> s.reps /= Nothing && s.weight /= Nothing) ss
-
-        scanWeeks : Int -> List Week -> ( Int, Int )
-        scanWeeks wIdx weeks =
-            case weeks of
-                [] -> ( 0, 0 ) -- default fallback
-                w :: restW ->
-                    case scanWorkouts wIdx 0 w.workouts of
-                        Just wkIdx -> ( wIdx, wkIdx )
-                        Nothing -> scanWeeks (wIdx + 1) restW
-        scanWorkouts : Int -> Int -> List Workout -> Maybe Int
-        scanWorkouts wIdx wkIdx workouts =
-            case workouts of
-                [] -> Nothing
-                wo :: restWo ->
-                    if List.all isLogged wo.exercises then
-                        scanWorkouts wIdx (wkIdx + 1) restWo
-                    else
-                        Just wkIdx
-    in
-    scanWeeks 0 plan.weeks
-
 viewWeek : Int -> Week -> List (Html Msg)
 viewWeek wIdx week =
     let
@@ -377,13 +364,15 @@ viewSetRow model exIdx setIdx _ =
         wVal = inputRec.weight
         rVal = inputRec.reps
         logged = inputRec.logged
-        ready = (String.length wVal > 0) && (String.length rVal > 0) && not logged
+        editing = inputRec.editing
+        ready = (String.length wVal > 0) && (String.length rVal > 0)
+        disableFields = logged && not editing
     in
     div [ class "flex items-end gap-3" ]
         [ span [ class "text-xs w-10 text-slate-400" ] [ text ("Set " ++ String.fromInt (setIdx + 1)) ]
-        , numberField wVal logged (EditSetWeight exIdx setIdx) "Weight"
-        , numberField rVal logged (EditSetReps exIdx setIdx) "Reps"
-        , setLogButton exIdx setIdx ready logged
+        , numberField wVal disableFields (EditSetWeight exIdx setIdx) "Weight"
+        , numberField rVal disableFields (EditSetReps exIdx setIdx) "Reps"
+        , setActionButtons exIdx setIdx ready logged editing
         ]
 
 numberField : String -> Bool -> (String -> Msg) -> String -> Html Msg
@@ -401,15 +390,26 @@ numberField current disabledAll toMsg label =
             []
         ]
 
-setLogButton : Int -> Int -> Bool -> Bool -> Html Msg
-setLogButton exIdx setIdx ready logged =
-    button
-        [ class ("mt-4 h-8 px-3 inline-flex items-center rounded-md text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed " ++
-            (if logged then "bg-emerald-600" else "bg-sky-600 hover:bg-sky-500"))
-        , disabled (not ready)
-        , onClick (LogSet exIdx setIdx)
-        ]
-        [ text (if logged then "Done" else "Log") ]
+setActionButtons : Int -> Int -> Bool -> Bool -> Bool -> Html Msg
+setActionButtons exIdx setIdx ready logged editing =
+    let
+        base cls disabledFlag click lbl =
+            button
+                [ class ("mt-4 h-8 px-3 inline-flex items-center rounded-md text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed " ++ cls)
+                , disabled disabledFlag
+                , onClick click
+                ]
+                [ text lbl ]
+    in
+    if editing then
+        div [ class "flex gap-2" ]
+            [ base "bg-sky-600 hover:bg-sky-500" (not ready) (LogSet exIdx setIdx) "Save"
+            , base "bg-slate-600 hover:bg-slate-500" False (CancelEditSet exIdx setIdx) "Cancel"
+            ]
+    else if logged then
+        base "bg-emerald-600 hover:bg-emerald-500" False (StartEditSet exIdx setIdx) "Edit"
+    else
+        base "bg-sky-600 hover:bg-sky-500" (not ready) (LogSet exIdx setIdx) "Log"
 
 -- INPUT STATE HELPERS
 
@@ -418,7 +418,13 @@ inputKey wIdx wkIdx exIdx setIdx =
     String.fromInt wIdx ++ ":" ++ String.fromInt wkIdx ++ ":" ++ String.fromInt exIdx ++ ":" ++ String.fromInt setIdx
 
 defaultSetInput : SetInput
-defaultSetInput = { weight = "", reps = "", logged = False }
+defaultSetInput = { weight = "", reps = "", logged = False, editing = False }
+
+setEditingUpdate : Bool -> Maybe SetInput -> SetInput
+setEditingUpdate editing maybeSI =
+    case maybeSI of
+        Just si -> { si | editing = editing }
+        Nothing -> { defaultSetInput | editing = editing }
 
 getSetInput : Int -> Int -> Int -> Int -> Inputs -> SetInput
 getSetInput wIdx wkIdx exIdx setIdx inputs =
@@ -458,6 +464,7 @@ buildInputsFromPlan plan =
                                             , { weight = maybeToStrFloat s.weight
                                               , reps = maybeToStr s.reps
                                               , logged = (s.weight /= Nothing && s.reps /= Nothing)
+                                              , editing = False
                                               }
                                             )
                                         )
