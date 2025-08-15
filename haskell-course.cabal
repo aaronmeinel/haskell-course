@@ -131,19 +131,29 @@ test-suite haskell-course-test
                     , MesocyclePersistence
                     , WorkoutLogPersistence
                     , WorkoutTemplate
+                    , IntegrationSpec
+                    , Api.Types
+                    , Api.Routes
+                    , Api.Server
     -- other-extensions:
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test
                    , src
-    build-depends:
-        base ^>=4.18.3.0
-        , hspec
-        , yaml
-        , aeson
-        , text
-        , directory
-        , haskell-course
-        , time
-        , bytestring
+    build-depends:    base ^>=4.18.3.0
+                    , hspec
+                    , yaml
+                    , aeson
+                    , text
+                    , directory
+                    , haskell-course
+                    , time
+                    , bytestring
+                    , servant-client
+                    , http-client
+                    , warp
+                    , servant
+                    , servant-server
+                    , wai
+                    , wai-cors
 
     main-is:          Main.hs

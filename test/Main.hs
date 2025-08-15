@@ -7,6 +7,7 @@ import qualified Mesocycle
 import MesocyclePersistence (saveMesocycle, loadMesocycle)
 import System.Directory (removeFile, getTemporaryDirectory)
 import qualified WorkoutLogOpsSpec
+import qualified IntegrationSpec
 
 mkExercise :: String -> WorkoutTemplate.MuscleGroup -> Int -> Maybe Int -> Maybe Int -> Mesocycle.MesocycleExercise
 mkExercise name grp sets presReps perfReps = Mesocycle.MesocycleExercise
@@ -131,4 +132,5 @@ main = hspec $ do
   it "can be used for reps by rounding to Int" $ (round (Mesocycle.suggestNextPrescription 99 2.5) :: Int) `shouldBe` 101
 
   WorkoutLogOpsSpec.spec
+  IntegrationSpec.spec
 

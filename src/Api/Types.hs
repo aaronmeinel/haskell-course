@@ -12,7 +12,7 @@ import qualified WorkoutTemplate ()
 
 -- Version response type (moved here for central export)
 newtype VersionResponse = VersionResponse { apiVersion :: Int }
-  deriving (Eq, Show, Generic, ToJSON)
+  deriving (Eq, Show, Generic, ToJSON, FromJSON)
 -- (no extra imports needed currently)
 
 -- Logging DTOs
