@@ -4,9 +4,8 @@ module MesocyclePersistence (
 ) where
 
 import Mesocycle
-import Data.Aeson (ToJSON, FromJSON, encode, decode)
+import Data.Aeson (encode, decode)
 import qualified Data.ByteString.Lazy as BL
-import GHC.Generics (Generic)
 
 -- Derive ToJSON/FromJSON for all relevant types
 

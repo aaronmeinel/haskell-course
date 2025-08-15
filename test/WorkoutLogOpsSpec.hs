@@ -1,13 +1,10 @@
 module WorkoutLogOpsSpec where
 
 import Test.Hspec
-import Data.Time (UTCTime)
 import WorkoutLog
 import WorkoutLogOps
 import WorkoutLogPersistence (saveWorkoutLog, loadWorkoutLog)
 import System.Directory (removeFile, getTemporaryDirectory)
-import Data.Aeson (encode, decode)
-import qualified Data.ByteString.Lazy as BL
 
 spec :: Spec
 spec = do

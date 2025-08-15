@@ -67,8 +67,8 @@ data ExerciseDTO = ExerciseDTO
   , muscleGroup :: String
   , prescribedSets :: Int
   , prescribedReps :: Maybe Int
-  , performedSets :: Maybe Int
-  , performedReps :: Maybe Int
+  , performedSets :: Int  -- derived count
+  , performedReps :: Maybe Int -- last logged reps
   , sets :: [SetPerfDTO]
   } deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
@@ -100,8 +100,8 @@ fromDomainExercise ex = ExerciseDTO
   , muscleGroup = show (Domain.muscleGroup ex)
   , prescribedSets = Domain.prescribedSets ex
   , prescribedReps = fmap Domain.unReps (Domain.prescribedReps ex)
-  , performedSets = Domain.performedSets ex
-  , performedReps = fmap Domain.unReps (Domain.performedReps ex)
+  , performedSets = Domain.completedSets ex
+  , performedReps = fmap Domain.unReps (Domain.lastLoggedReps ex)
   , sets = map fromDomainSet (Domain.setPerformances ex)
   }
 

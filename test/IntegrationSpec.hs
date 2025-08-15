@@ -14,19 +14,18 @@ import Api.Types
 
 data Env = Env { getVersion :: ClientM VersionResponse
                , getPlan :: ClientM PlanDTO
-               , postLog :: ExerciseLogRequest -> ClientM LogResponse
                , postSetLog :: SetLogRequest -> ClientM LogResponse }
 
 mkEnv :: Env
-mkEnv = let (v :<|> p :<|> l :<|> sl) = client (Proxy :: Proxy RootAPI) in Env v p l sl
+mkEnv = let (v :<|> p :<|> _ :<|> sl) = client (Proxy :: Proxy RootAPI) in Env v p sl
 
 spec :: Spec
 spec = describe "Integration" $ do
   it "serves version and plan and accepts a set log" $ 
     testWithApplication (pure app) $ \port -> do
-      let baseUrl = BaseUrl Http "127.0.0.1" port ""
-      manager <- newManager defaultManagerSettings
-      let run c = runClientM c (mkClientEnv manager baseUrl)
+      let testBaseUrl = BaseUrl Http "127.0.0.1" port ""
+      mgr <- newManager defaultManagerSettings
+      let run c = runClientM c (mkClientEnv mgr testBaseUrl)
       -- Version
       Right (VersionResponse 1) <- run (getVersion mkEnv)
       -- Plan

@@ -56,7 +56,7 @@ findMostRecentSetLog wlog workoutName exName mSetIdx =
 -- | Suggest the next prescription (weight, reps) for an exercise based on log history and target RIR
 --   This is a simple example: if last set was successful, increase weight by percent; otherwise, keep the same or decrease
 suggestNextPrescriptionFromLog :: WorkoutLog -> String -> String -> Maybe Int -> Int -> Double -> (Double, Int)
-suggestNextPrescriptionFromLog wlog workoutName exName mSetIdx targetRIR percentIncrease =
+suggestNextPrescriptionFromLog wlog workoutName exName mSetIdx _targetRIR percentIncrease =
   case findMostRecentSetLog wlog workoutName exName mSetIdx of
     Just lastSet ->
       let lastWeight = performedWeight lastSet

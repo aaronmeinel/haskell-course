@@ -4,6 +4,7 @@ module WorkoutLog where
 import GHC.Generics (Generic)
 import Data.Time (UTCTime)
 import Mesocycle (PreExerciseFeedback, PostExerciseFeedback)
+import Data.Aeson (ToJSON, FromJSON)
 
 -- Log of a single set performed by the user
 -- setIndex is 1-based (first set = 1)
@@ -36,3 +37,10 @@ data WorkoutLog = WorkoutLog
 
 -- All logs for a user (could be split by mesocycle, etc.)
 type UserLog = [WorkoutLog]
+
+instance ToJSON SetLog
+instance FromJSON SetLog
+instance ToJSON FeedbackLog
+instance FromJSON FeedbackLog
+instance ToJSON WorkoutLog
+instance FromJSON WorkoutLog

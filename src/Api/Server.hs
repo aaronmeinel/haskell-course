@@ -3,13 +3,12 @@
 module Api.Server (app) where
 
 import Servant
-import Network.Wai (Application)
+import Network.Wai ()
 import Network.Wai.Middleware.Cors (simpleCors)
 import Api.Routes
 import Api.Types ( ExerciseLogRequest(..)
                  , SetLogRequest(..)
                  , LogResponse(..)
-                 , PlanDTO(..)
                  , VersionResponse(..)
                  , fromDomainPlan
                  )
@@ -17,7 +16,7 @@ import qualified Mesocycle
 import qualified WorkoutTemplate
 import Data.IORef
 import System.IO.Unsafe (unsafePerformIO)
-import Servant.Server.StaticFiles (serveDirectoryFileServer)
+import Servant.Server.StaticFiles ()
 import Control.Monad.IO.Class (liftIO)
 import qualified MesocyclePersistence
 import System.Directory (doesFileExist, createDirectoryIfMissing)
@@ -84,13 +83,13 @@ serverRoot = versionH :<|> planH :<|> logH :<|> logSetH
     planH = do
       p <- liftIO (readIORef globalPlanRef)
       pure (fromDomainPlan p)
-    logH req = do
-      updated <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> let p' = applyLog req p in (p', p'))
-      liftIO $ MesocyclePersistence.saveMesocycle persistFile updated
+    logH reqBody = do
+      newPlan <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> let p' = applyLog reqBody p in (p', p'))
+      liftIO $ MesocyclePersistence.saveMesocycle persistFile newPlan
       pure (LogResponse True "Logged")
     logSetH sreq = do
-      updated <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> let p' = applySetLog sreq p in (p', p'))
-      liftIO $ MesocyclePersistence.saveMesocycle persistFile updated
+      newPlan <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> let p' = applySetLog sreq p in (p', p'))
+      liftIO $ MesocyclePersistence.saveMesocycle persistFile newPlan
       pure (LogResponse True "Set Logged")
 
 server :: Server FullAPI
@@ -100,7 +99,7 @@ app :: Application
 app = simpleCors $ serve (Proxy :: Proxy FullAPI) server
 
 applyLog :: ExerciseLogRequest -> Mesocycle.Mesocycle -> Mesocycle.Mesocycle
-applyLog req@ExerciseLogRequest
+applyLog ExerciseLogRequest
   { week = wk
   , workoutIndex = wIx
   , exerciseIndex = eIx
@@ -119,8 +118,14 @@ applyLog req@ExerciseLogRequest
 
     updateExercise j ex
       | j /= eIx = ex
-      | otherwise = ex { Mesocycle.performedSets = Just ls
-                       , Mesocycle.performedReps = Just (Mesocycle.Reps lr) }
+      | otherwise =
+          let upd k sp
+                | k < ls = case Mesocycle.reps sp of
+                              Nothing -> sp { Mesocycle.reps = Just (Mesocycle.Reps lr) }
+                              Just _  -> sp
+                | otherwise = sp
+              newSets = zipWith upd [0..] (Mesocycle.setPerformances ex)
+          in ex { Mesocycle.setPerformances = newSets }
 
     mapWithIndex f = zipWith f [0..]
 
@@ -147,16 +152,12 @@ applySetLog SetLogRequest
     updateExercise j ex
       | j /= seIx = ex
       | otherwise =
-          let
-            upd k sp
-              | k == sIdx = sp { Mesocycle.weight = Just (Mesocycle.Weight lw)
-                               , Mesocycle.reps   = Just (Mesocycle.Reps setLR) }
-              | otherwise = sp
-            newSets = zipWith upd [0..] (Mesocycle.setPerformances ex)
-            performedSets' = Just (length (filter (\sp -> Mesocycle.weight sp /= Nothing && Mesocycle.reps sp /= Nothing) newSets))
-          in ex { Mesocycle.setPerformances = newSets
-                , Mesocycle.performedSets   = performedSets'
-                }
+          let upd k sp
+                | k == sIdx = sp { Mesocycle.weight = Just (Mesocycle.Weight lw)
+                                  , Mesocycle.reps   = Just (Mesocycle.Reps setLR) }
+                | otherwise = sp
+              newSets = zipWith upd [0..] (Mesocycle.setPerformances ex)
+          in ex { Mesocycle.setPerformances = newSets }
 
     mapWithIndex f = zipWith f [0..]
 

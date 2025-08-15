@@ -103,9 +103,7 @@ data MesocycleExercise = MesocycleExercise
   { exerciseName     :: String
   , muscleGroup      :: WorkoutTemplate.MuscleGroup
   , prescribedSets   :: Int
-  , performedSets    :: Maybe Int
   , prescribedReps   :: Maybe Reps
-  , performedReps    :: Maybe Reps
   , preFeedback      :: Maybe PreExerciseFeedback
   , postFeedback     :: Maybe PostExerciseFeedback
   , setPerformances  :: [SetPerformance] -- ^ Per-set logged weight/reps (length = prescribedSets)
@@ -139,9 +137,7 @@ toMesocycleExercise (WorkoutTemplate.Exercise name targetMuscleGroup sets) = Mes
           { exerciseName = name
           , muscleGroup = targetMuscleGroup
           , prescribedSets = sets
-          , performedSets = Nothing
           , prescribedReps = Nothing
-          , performedReps = Nothing
           , preFeedback = Nothing
           , postFeedback = Nothing
           , setPerformances = replicate sets (SetPerformance Nothing Nothing)
@@ -152,14 +148,15 @@ toMesocycleExercise (WorkoutTemplate.Exercise name targetMuscleGroup sets) = Mes
 -- | Find the next exercise that needs to be performed/logged.
 -- Returns (weekNumber, workoutName, exercise)
 findNextActiveExercise :: Mesocycle -> Maybe (Int, String, MesocycleExercise)
-findNextActiveExercise (Mesocycle { weeks }) = find needsInput allExercises
+findNextActiveExercise (Mesocycle { weeks }) = find (needsInput . thd) allExercises
   where
   allExercises = [ (unWeekNumber (weekNumber w), workoutName wo, ex)
                    | w <- weeks
                    , wo <- workouts w
                    , ex <- exercises wo
                    ]
-  needsInput (_, _, ex) = performedSets ex == Nothing || performedReps ex == Nothing
+  thd (_,_,x) = x
+  needsInput ex = not (exerciseComplete ex)
 
 -- | Given the current week and total training weeks, prescribe RIR.
 prescribedRIR :: WeekNumber -> Int -> Int
@@ -177,8 +174,7 @@ findMostRecentCompleted (Mesocycle { weeks }) exName =
                      , wo <- reverse (workouts w)
                      , ex <- reverse (exercises wo)
                      , exerciseName ex == exName
-                     , performedSets ex /= Nothing
-                     , performedReps ex /= Nothing
+                     , exerciseComplete ex
                      ]
   in case allExercises of
        (x:_) -> Just x
@@ -196,4 +192,20 @@ suggestNextPrescription prevValue percent =
 -- | Round a value to the nearest step (e.g., 1.25 for kg plates)
 roundToStep :: Double -> Double -> Double
 roundToStep value step = (fromInteger (round (value / step))) * step
+
+-- Derived / helper computations (no stored duplication)
+
+-- | Count sets that have reps logged (weight optional for completion criteria)
+completedSets :: MesocycleExercise -> Int
+completedSets ex = length [ () | SetPerformance { reps = Just _ } <- setPerformances ex ]
+
+-- | Determine if an exercise is complete (all prescribed sets have reps)
+exerciseComplete :: MesocycleExercise -> Bool
+exerciseComplete ex = completedSets ex >= prescribedSets ex
+
+-- | Last logged reps among set performances
+lastLoggedReps :: MesocycleExercise -> Maybe Reps
+lastLoggedReps ex = case [ r | SetPerformance { reps = Just r } <- setPerformances ex ] of
+  [] -> Nothing
+  rs -> Just (last rs)
 
