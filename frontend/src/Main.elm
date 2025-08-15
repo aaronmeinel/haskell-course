@@ -2,9 +2,10 @@ module Main exposing (main)
 
 import Browser
 import Platform.Sub as Sub
-import Html exposing (Html, div, h1, text, ul, li, span, nav, button)
-import Html.Attributes exposing (class)
-import Html.Events exposing (onClick)
+import Html exposing (Html, div, h1, text, ul, li, span, nav, button, input)
+import Html.Attributes exposing (class, type_, value, placeholder, disabled)
+import Html.Events exposing (onClick, onInput)
+import Json.Encode as E
 import Http
 import Json.Decode as D
 
@@ -15,15 +16,19 @@ type alias Exercise =
     , muscleGroup : String
     , prescribedSets : Int
     , prescribedReps : Maybe Int
+    , performedSets : Maybe Int
+    , performedReps : Maybe Int
     }
 
 exerciseDecoder : D.Decoder Exercise
 exerciseDecoder =
-    D.map4 Exercise
+    D.map6 Exercise
         (D.field "exerciseName" D.string)
         (D.field "muscleGroup" D.string)
         (D.field "prescribedSets" D.int)
         (D.field "prescribedReps" (D.nullable D.int))
+        (D.field "performedSets" (D.nullable D.int))
+        (D.field "performedReps" (D.nullable D.int))
 
 
 type alias Workout =
@@ -73,15 +78,26 @@ type Status
     | Failure String
     | Loaded Plan
 
+type alias ExerciseInput =
+    { sets : String
+    , reps : String
+    , logged : Bool
+    }
+
 type alias Model =
     { status : Status
     , route : Route
+    , inputs : List ExerciseInput
+    , logSubmitting : Maybe Int -- exercise index currently submitting
+    , logError : Maybe String
+    , currentWeekIndex : Int
+    , currentWorkoutIndex : Int
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { status = Loading, route = Current }
+    ( { status = Loading, route = Current, inputs = [], logSubmitting = Nothing, logError = Nothing, currentWeekIndex = 0, currentWorkoutIndex = 0 }
     , fetchPlan
     )
 
@@ -91,12 +107,26 @@ init _ =
 type Msg
     = GotPlan (Result Http.Error Plan)
     | SetRoute Route
+    | SetCurrent Int Int -- weekIdx workoutIdx
+    | EditSets Int String
+    | EditReps Int String
+    | LogExercise Int
+    | LoggedExercise Int (Result Http.Error ())
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         GotPlan (Ok plan) ->
-            ( { model | status = Loaded plan }, Cmd.none )
+            let
+                initInputs =
+                    case plan.weeks of
+                        w :: _ ->
+                            case w.workouts of
+                                wk :: _ -> List.indexedMap (\_ ex -> { sets = maybeToStr ex.performedSets, reps = maybeToStr ex.performedReps, logged = (ex.performedSets /= Nothing && ex.performedReps /= Nothing) }) wk.exercises
+                                [] -> []
+                        [] -> []
+            in
+            ( { model | status = Loaded plan, inputs = initInputs }, Cmd.none )
 
         GotPlan (Err err) ->
             ( { model | status = Failure (debugHttp err) }, Cmd.none )
@@ -104,12 +134,47 @@ update msg model =
         SetRoute r ->
             ( { model | route = r }, Cmd.none )
 
+        SetCurrent wIdx wkIdx ->
+            ( { model | currentWeekIndex = wIdx, currentWorkoutIndex = wkIdx, route = Current }
+            , Cmd.none
+            )
+
+        EditSets idx txt ->
+            ( { model | inputs = updateInput idx (\i -> { i | sets = txt }) model.inputs }, Cmd.none )
+
+        EditReps idx txt ->
+            ( { model | inputs = updateInput idx (\i -> { i | reps = txt }) model.inputs }, Cmd.none )
+
+        LogExercise idx ->
+            case model.status of
+                Loaded plan ->
+                    let
+                        body = buildLogBody model plan idx model.inputs
+                    in
+                    ( { model | logSubmitting = Just idx, logError = Nothing }
+                    , postLog idx body
+                    )
+                _ -> ( model, Cmd.none )
+
+        LoggedExercise idx (Ok _) ->
+            ( { model | inputs = updateInput idx (\i -> { i | logged = True }) model.inputs, logSubmitting = Nothing }
+            , fetchPlan -- refresh plan (could optimize later)
+            )
+
+        LoggedExercise _ (Err e) ->
+            ( { model | logSubmitting = Nothing, logError = Just (debugHttp e) }, Cmd.none )
+
 
 fetchPlan : Cmd Msg
 fetchPlan =
-    Http.get
-        { url = "/api/plan"
-        , expect = Http.expectJson GotPlan planDecoder
+    Http.get { url = "/api/plan", expect = Http.expectJson GotPlan planDecoder }
+
+postLog : Int -> E.Value -> Cmd Msg
+postLog idx body =
+    Http.post
+        { url = "/api/log"
+        , body = Http.jsonBody body
+        , expect = Http.expectWhatever (\result -> LoggedExercise idx result)
         }
 
 
@@ -130,10 +195,10 @@ view model =
                 Loaded plan ->
                     case model.route of
                         Overview ->
-                            ul [ class "grid gap-7 md:grid-cols-2 xl:grid-cols-3" ] (List.concatMap viewWeek plan.weeks)
+                            ul [ class "grid gap-7 md:grid-cols-2 xl:grid-cols-3" ] (List.concat (List.indexedMap viewWeek plan.weeks))
 
                         Current ->
-                            viewCurrent plan
+                            viewCurrent model plan
     in
     div []
         [ viewNav model.route
@@ -162,11 +227,15 @@ viewNav currentRoute =
         , tab Overview "Overview" "☰"
         ]
 
-viewCurrent : Plan -> Html Msg
-viewCurrent plan =
-    case firstWorkout plan of
+viewCurrent : Model -> Plan -> Html Msg
+viewCurrent model plan =
+    let
+        maybeWorkout =
+            getWorkout model.currentWeekIndex model.currentWorkoutIndex plan
+    in
+    case maybeWorkout of
         Nothing ->
-            div [ class "text-slate-400 text-sm" ] [ text "No workout available." ]
+            div [ class "text-slate-400 text-sm" ] [ text "Selected workout not found." ]
         Just ( weekNum, workout ) ->
             div [ class "max-w-xl" ]
                 [ div [ class "mb-5 flex items-center gap-3" ]
@@ -177,33 +246,38 @@ viewCurrent plan =
                     [ div [ class "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" ]
                         [ div [ class "absolute -inset-px bg-gradient-to-br from-sky-400/10 via-transparent to-violet-500/10 blur-md" ] [] ]
                     , span [ class "block font-semibold text-sky-300 tracking-wide mb-4" ] [ text "Exercises" ]
-                    , ul [ class "flex flex-wrap gap-2" ] (List.map viewExercise workout.exercises)
+                    , ul [ class "space-y-3" ] (List.indexedMap (viewExerciseLog model) workout.exercises)
                     ]
                 ]
 
-firstWorkout : Plan -> Maybe ( Int, Workout )
-firstWorkout plan =
-    case plan.weeks of
-        [] -> Nothing
+getWorkout : Int -> Int -> Plan -> Maybe ( Int, Workout )
+getWorkout wIdx wkIdx plan =
+    case List.drop wIdx plan.weeks of
         w :: _ ->
-            case w.workouts of
-                [] -> Nothing
+            case List.drop wkIdx w.workouts of
                 wk :: _ -> Just ( w.weekNumber, wk )
+                [] -> Nothing
+        [] -> Nothing
 
-viewWeek : Week -> List (Html msg)
-viewWeek week =
+viewWeek : Int -> Week -> List (Html Msg)
+viewWeek wIdx week =
     let
-        header = li [ class "col-span-full text-amber-300 font-semibold tracking-wide text-lg mt-6 first:mt-0 flex items-center gap-2" ]
-            [ weekBadge week.weekNumber
-            , text ("Week " ++ String.fromInt week.weekNumber)
-            ]
-        workouts = List.map viewWorkout week.workouts
+        header =
+            li [ class "col-span-full text-amber-300 font-semibold tracking-wide text-lg mt-6 first:mt-0 flex items-center gap-2" ]
+                [ weekBadge week.weekNumber
+                , text ("Week " ++ String.fromInt week.weekNumber)
+                ]
+
+        workouts =
+            List.indexedMap (viewWorkout wIdx) week.workouts
     in
     header :: workouts
 
-viewWorkout : Workout -> Html msg
-viewWorkout w =
-    li [ class "group relative overflow-hidden rounded-2xl p-5 bg-slate-900/50 ring-1 ring-white/5 hover:ring-sky-400/40 shadow-sm hover:shadow-xl transition-all duration-300 backdrop-blur-sm" ]
+viewWorkout : Int -> Int -> Workout -> Html Msg
+viewWorkout wIdx wkIdx w =
+    li [ class "cursor-pointer group relative overflow-hidden rounded-2xl p-5 bg-slate-900/50 ring-1 ring-white/5 hover:ring-sky-400/40 shadow-sm hover:shadow-xl transition-all duration-300 backdrop-blur-sm"
+       , onClick (SetCurrent wIdx wkIdx)
+       ]
         [ div [ class "absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" ]
             [ div [ class "absolute -inset-px bg-gradient-to-br from-sky-400/10 via-transparent to-violet-500/10 blur-md" ] [] ]
         , span [ class "relative block font-semibold text-sky-300 group-hover:text-sky-200 tracking-wide mb-3" ] [ text w.workoutName ]
@@ -214,6 +288,92 @@ viewExercise : Exercise -> Html msg
 viewExercise ex =
     li [ class "text-[11px] leading-tight bg-slate-800/60 hover:bg-slate-700/60 border border-slate-600/40 hover:border-sky-400/40 rounded-md px-2.5 py-1 tracking-wide font-medium text-slate-300 hover:text-sky-200 transition-colors duration-150" ]
         [ text (ex.exerciseName ++ " · sets " ++ String.fromInt ex.prescribedSets) ]
+
+viewExerciseLog : Model -> Int -> Exercise -> Html Msg
+viewExerciseLog model idx ex =
+    let
+        -- We treat initial RIR as prescribed "goal" label
+        rirLabel = "RIR 3 (initial)"
+        input = getInput idx model.inputs
+        setsVal = input.sets
+        repsVal = input.reps
+        isLogged = input.logged
+        submitting = model.logSubmitting == Just idx
+        ready = (String.length setsVal > 0) && (String.length repsVal > 0) && not isLogged && not submitting
+    in
+    li [ class "flex flex-col gap-2 rounded-xl border border-slate-700/40 bg-slate-800/40 p-4" ]
+        [ span [ class "text-sm font-medium text-sky-200" ] [ text ex.exerciseName ]
+        , span [ class "text-[11px] uppercase tracking-wide text-slate-500" ] [ text rirLabel ]
+        , div [ class "flex flex-wrap items-end gap-3" ]
+            [ inputField idx "Sets" setsVal isLogged submitting EditSets
+            , inputField idx "Reps" repsVal isLogged submitting EditReps
+            , logButton idx ready isLogged submitting
+            ]
+        , if isLogged then span [ class "text-[11px] text-emerald-400 font-medium" ] [ text "Logged" ] else text ""
+        ]
+
+inputField : Int -> String -> String -> Bool -> Bool -> (Int -> String -> Msg) -> Html Msg
+inputField idx label current isLogged submitting toMsg =
+    let
+        ph = label
+    in
+    div [ class "flex flex-col w-20" ]
+        [ span [ class "text-[10px] tracking-wide text-slate-400 mb-1" ] [ text label ]
+        , input
+            [ class "rounded-md bg-slate-900/60 border border-slate-600/40 focus:border-sky-400/60 focus:outline-none px-2 py-1 text-sm"
+            , type_ "number"
+            , placeholder ph
+            , value current
+            , disabled (isLogged || submitting)
+            , onInput (toMsg idx)
+            ]
+            []
+        ]
+
+logButton : Int -> Bool -> Bool -> Bool -> Html Msg
+logButton idx ready isLogged submitting =
+    button
+    [ class ("mt-4 h-9 px-4 inline-flex items-center rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed " ++
+        (if isLogged then "bg-emerald-600 hover:bg-emerald-500" else "bg-sky-600 hover:bg-sky-500"))
+    , disabled (not ready)
+    , onClick (LogExercise idx)
+        ]
+    [ text (if isLogged then "Done" else if submitting then "..." else "Log") ]
+
+updateInput : Int -> (ExerciseInput -> ExerciseInput) -> List ExerciseInput -> List ExerciseInput
+updateInput idx f inputs =
+    List.indexedMap (\i it -> if i == idx then f it else it) inputs
+
+getInput : Int -> List ExerciseInput -> ExerciseInput
+getInput idx inputs =
+    case List.drop idx inputs of
+        rec :: _ -> rec
+        [] -> { sets = "", reps = "", logged = False }
+
+buildLogBody : Model -> Plan -> Int -> List ExerciseInput -> E.Value
+buildLogBody model plan idx inputs =
+    let
+        ( weekNum, workoutIndex ) =
+            case getWorkout model.currentWeekIndex model.currentWorkoutIndex plan of
+                Just ( wn, _ ) -> ( wn, model.currentWorkoutIndex )
+                Nothing -> ( 1, 0 )
+        sets =
+            case List.drop idx inputs |> List.head of
+                Just rec -> rec.sets
+                Nothing -> "0"
+        reps =
+            case List.drop idx inputs |> List.head of
+                Just rec -> rec.reps
+                Nothing -> "0"
+    in
+    E.object
+    [ ( "week", E.int weekNum )
+    , ( "workoutIndex", E.int workoutIndex )
+        , ( "exerciseIndex", E.int idx )
+        , ( "loggedSets", E.int (String.toInt sets |> Maybe.withDefault 0) )
+        , ( "loggedReps", E.int (String.toInt reps |> Maybe.withDefault 0) )
+        ]
+
 
 loaderIcon : Html msg
 loaderIcon =
@@ -252,3 +412,9 @@ debugHttp err =
 
         Http.BadBody m ->
             "BadBody: " ++ m
+
+maybeToStr : Maybe Int -> String
+maybeToStr m =
+    case m of
+        Just n -> String.fromInt n
+        Nothing -> ""

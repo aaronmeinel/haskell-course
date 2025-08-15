@@ -13,8 +13,9 @@ import Data.Aeson (ToJSON)
 -- Plan returns the prescription-only plan
 
 type APIV1 = 
-       "version" :> Get '[JSON] VersionResponse
+    "version" :> Get '[JSON] VersionResponse
   :<|> "plan"    :> Get '[JSON] PlanDTO
+  :<|> "log"     :> ReqBody '[JSON] ExerciseLogRequest :> Post '[JSON] LogResponse
 
 -- Wrap version response to allow extension later
 newtype VersionResponse = VersionResponse { apiVersion :: Int }

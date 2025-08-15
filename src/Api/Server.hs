@@ -9,15 +9,21 @@ import Api.Routes
 import Api.Types
 import qualified Mesocycle
 import qualified WorkoutTemplate
-import Servant.API.Raw
-import Servant.Server
+import Data.IORef
+import System.IO.Unsafe (unsafePerformIO)
 import Servant.Server.StaticFiles (serveDirectoryFileServer)
+import Control.Monad.IO.Class (liftIO)
 
 -- For now we generate a trivial plan each server start.
 -- Later: load from file or configuration.
 
-plan :: Mesocycle.Mesocycle
-plan = Mesocycle.generateMesocycle sampleTemplate 4
+-- Global in-memory mutable mesocycle (simple dev prototype; not for production)
+{-# NOINLINE globalPlanRef #-}
+globalPlanRef :: IORef Mesocycle.Mesocycle
+globalPlanRef = unsafePerformIO (newIORef initialPlan)
+
+initialPlan :: Mesocycle.Mesocycle
+initialPlan = Mesocycle.generateMesocycle sampleTemplate 4
   where
     sampleTemplate = WorkoutTemplate.WorkoutTemplate
       [ pushDay, pullDay, legsDay ]
@@ -50,13 +56,37 @@ plan = Mesocycle.generateMesocycle sampleTemplate 4
 type FullAPI = RootAPI :<|> Raw
 
 serverRoot :: Server RootAPI
-serverRoot = versionH :<|> planH
+serverRoot = versionH :<|> planH :<|> logH
   where
     versionH = pure (VersionResponse 1)
-    planH = pure (fromDomainPlan plan)
+    planH = do
+      p <- liftIO (readIORef globalPlanRef)
+      pure (fromDomainPlan p)
+    logH req = do
+      _ <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> (applyLog req p, ()))
+      pure (LogResponse True "Logged")
 
 server :: Server FullAPI
 server = serverRoot :<|> serveDirectoryFileServer "dist"
 
 app :: Application
 app = simpleCors $ serve (Proxy :: Proxy FullAPI) server
+
+-- Apply an ExerciseLogRequest to a Mesocycle (naive traversal)
+applyLog :: ExerciseLogRequest -> Mesocycle.Mesocycle -> Mesocycle.Mesocycle
+applyLog req m = m { Mesocycle.weeks = map updateWeek (Mesocycle.weeks m) }
+  where
+    updateWeek w
+      | Mesocycle.weekNumber w /= week req = w
+      | otherwise = w { Mesocycle.workouts = mapWithIndex updateWorkout (Mesocycle.workouts w) }
+    updateWorkout i wo
+      | i /= workoutIndex req = wo
+      | otherwise = wo { Mesocycle.exercises = mapWithIndex updateExercise (Mesocycle.exercises wo) }
+    updateExercise j ex
+      | j /= exerciseIndex req = ex
+      | otherwise =
+      let ExerciseLogRequest{ loggedSets = ls, loggedReps = lr } = req
+      in ex { Mesocycle.performedSets = Just ls
+        , Mesocycle.performedReps = Just lr
+                }
+    mapWithIndex f = zipWith f [0..]

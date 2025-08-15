@@ -7,17 +7,33 @@ import GHC.Generics (Generic)
 import Data.Aeson (ToJSON, FromJSON)
 import qualified Mesocycle as Domain
 import qualified WorkoutTemplate
+-- (no extra imports needed currently)
+
+-- Logging DTOs
+data ExerciseLogRequest = ExerciseLogRequest
+  { week :: Int
+  , workoutIndex :: Int
+  , exerciseIndex :: Int
+  , loggedSets :: Int
+  , loggedReps :: Int
+  } deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
+data LogResponse = LogResponse
+  { updated :: Bool
+  , message :: String
+  } deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
 -- CamelCase fields already match our Haskell names, so default mapping is fine.
 -- If later we need custom mapping we can adjust.
 
--- DTOs intentionally exclude performed* and feedback fields (separate endpoint later)
-
+-- DTOs intentionally exclude performed* and feedback fields 
 data ExerciseDTO = ExerciseDTO
   { exerciseName :: String
   , muscleGroup :: String
   , prescribedSets :: Int
   , prescribedReps :: Maybe Int
+  , performedSets :: Maybe Int
+  , performedReps :: Maybe Int
   } deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
 data WorkoutDTO = WorkoutDTO
@@ -43,6 +59,8 @@ fromDomainExercise ex = ExerciseDTO
   , muscleGroup = show (Domain.muscleGroup ex)
   , prescribedSets = Domain.prescribedSets ex
   , prescribedReps = Domain.prescribedReps ex
+  , performedSets = Domain.performedSets ex
+  , performedReps = Domain.performedReps ex
   }
 
 fromDomainWorkout :: Domain.MesocycleWorkout -> WorkoutDTO
