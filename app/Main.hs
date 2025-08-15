@@ -1,7 +1,7 @@
 module Main where
 
 import Network.Wai.Handler.Warp (run)
-import Api.Server (app)
+import Api.Server (mkApp)
 import System.Process (callProcess)
 
 
@@ -16,4 +16,5 @@ main :: IO ()
 main = do
   ensureElm
   putStrLn "Starting server on http://localhost:8080"
+  app <- mkApp
   run 8080 app

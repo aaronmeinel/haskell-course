@@ -2,7 +2,7 @@ module IntegrationSpec (spec) where
 
 import Test.Hspec
 -- Minimal imports; relying on servant-client against an in-process Warp server
-import Api.Server (app)
+import Api.Server (mkApp)
 import Network.Wai.Handler.Warp (testWithApplication)
 import Network.HTTP.Client (defaultManagerSettings, newManager)
 import Servant.Client
@@ -22,7 +22,7 @@ mkEnv = let (v :<|> p :<|> _ :<|> sl) = client (Proxy :: Proxy RootAPI) in Env v
 spec :: Spec
 spec = describe "Integration" $ do
   it "serves version and plan and accepts a set log" $ 
-    testWithApplication (pure app) $ \port -> do
+    testWithApplication mkApp $ \port -> do
       let testBaseUrl = BaseUrl Http "127.0.0.1" port ""
       mgr <- newManager defaultManagerSettings
       let run c = runClientM c (mkClientEnv mgr testBaseUrl)
