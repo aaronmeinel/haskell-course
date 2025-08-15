@@ -79,7 +79,8 @@ type FullAPI = RootAPI :<|> Raw
 serverRoot :: Server RootAPI
 serverRoot = versionH :<|> planH :<|> logH :<|> logSetH
   where
-    versionH = pure (VersionResponse 1)
+    -- API version bumped to 2 after removing duplicated performed fields and changing DTO semantics.
+    versionH = pure (VersionResponse 2)
     planH = do
       p <- liftIO (readIORef globalPlanRef)
       pure (fromDomainPlan p)

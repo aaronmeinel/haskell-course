@@ -22,6 +22,8 @@ type alias Exercise =
     , muscleGroup : String
     , prescribedSets : Int
     , prescribedReps : Maybe Int
+    , performedSets : Int
+    , performedReps : Maybe Int
     , sets : List SetPerf
     }
 
@@ -34,11 +36,13 @@ setDecoder =
 
 exerciseDecoder : D.Decoder Exercise
 exerciseDecoder =
-    D.map5 Exercise
+    D.map7 Exercise
         (D.field "exerciseName" D.string)
         (D.field "muscleGroup" D.string)
         (D.field "prescribedSets" D.int)
         (D.field "prescribedReps" (D.nullable D.int))
+        (D.field "performedSets" D.int)
+        (D.field "performedReps" (D.nullable D.int))
         (D.field "sets" (D.list setDecoder))
 
 
@@ -332,8 +336,15 @@ viewWorkout wIdx wkIdx w =
 
 viewExercise : Exercise -> Html msg
 viewExercise ex =
+    let
+        perfInfo =
+            if ex.performedSets > 0 then
+                " · " ++ String.fromInt ex.performedSets ++ " logged"
+            else
+                ""
+    in
     li [ class "text-[11px] leading-tight bg-slate-800/60 hover:bg-slate-700/60 border border-slate-600/40 hover:border-sky-400/40 rounded-md px-2.5 py-1 tracking-wide font-medium text-slate-300 hover:text-sky-200 transition-colors duration-150" ]
-        [ text (ex.exerciseName ++ " · sets " ++ String.fromInt ex.prescribedSets) ]
+        [ text (ex.exerciseName ++ " · sets " ++ String.fromInt ex.prescribedSets ++ perfInfo) ]
 
 viewExerciseLog : Model -> Int -> Exercise -> Html Msg
 viewExerciseLog model exIdx ex =

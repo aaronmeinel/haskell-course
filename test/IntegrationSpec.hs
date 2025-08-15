@@ -27,7 +27,7 @@ spec = describe "Integration" $ do
       mgr <- newManager defaultManagerSettings
       let run c = runClientM c (mkClientEnv mgr testBaseUrl)
       -- Version
-      Right (VersionResponse 1) <- run (getVersion mkEnv)
+      Right (VersionResponse 2) <- run (getVersion mkEnv)
       -- Plan
       Right plan <- run (getPlan mkEnv)
       numWeeks plan `shouldSatisfy` (> 0)
