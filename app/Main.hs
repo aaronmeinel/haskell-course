@@ -3,7 +3,7 @@ module Main where
 import Network.Wai.Handler.Warp (run)
 import Api.Server (app)
 import System.Process (callProcess)
-import Control.Monad (unless)
+
 
 -- Ensure Elm frontend is built before starting the server.
 -- Always invoke build script so updates are picked up; it's fast if unchanged.
