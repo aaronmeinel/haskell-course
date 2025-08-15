@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE DerivingStrategies #-}
 module Mesocycle where
 
 import GHC.Generics (Generic)
@@ -7,6 +9,19 @@ import Data.List (find)
 import Data.Aeson (ToJSON, FromJSON)
 
 import qualified WorkoutTemplate
+
+-- Newtypes for stronger type safety (Phase 1)
+newtype WeekNumber = WeekNumber { unWeekNumber :: Int }
+  deriving stock (Generic)
+  deriving newtype (Show, Eq, Ord, Enum, Num, Real, Integral)
+
+newtype Reps = Reps { unReps :: Int }
+  deriving stock (Generic)
+  deriving newtype (Show, Eq, Ord, Enum, Num, Real, Integral)
+
+newtype Weight = Weight { unWeight :: Double }
+  deriving stock (Generic)
+  deriving newtype (Show, Eq, Ord, Num, Real, Fractional)
 
 
 -- Enum types for feedback
@@ -61,6 +76,12 @@ instance ToJSON MesocycleWorkout
 instance FromJSON MesocycleWorkout
 instance ToJSON MesocycleExercise
 instance FromJSON MesocycleExercise
+instance ToJSON WeekNumber
+instance FromJSON WeekNumber
+instance ToJSON Reps
+instance FromJSON Reps
+instance ToJSON Weight
+instance FromJSON Weight
 
 
 data Mesocycle = Mesocycle
@@ -69,7 +90,7 @@ data Mesocycle = Mesocycle
   } deriving (Show, Eq, Generic)
 
 data MesocycleWeek = MesocycleWeek
-  { weekNumber    :: Int
+  { weekNumber    :: WeekNumber
   , workouts      :: [MesocycleWorkout]
   } deriving (Show, Eq, Generic)
 
@@ -83,8 +104,8 @@ data MesocycleExercise = MesocycleExercise
   , muscleGroup      :: WorkoutTemplate.MuscleGroup
   , prescribedSets   :: Int
   , performedSets    :: Maybe Int
-  , prescribedReps   :: Maybe Int
-  , performedReps    :: Maybe Int
+  , prescribedReps   :: Maybe Reps
+  , performedReps    :: Maybe Reps
   , preFeedback      :: Maybe PreExerciseFeedback
   , postFeedback     :: Maybe PostExerciseFeedback
   , setPerformances  :: [SetPerformance] -- ^ Per-set logged weight/reps (length = prescribedSets)
@@ -92,8 +113,8 @@ data MesocycleExercise = MesocycleExercise
 
 -- | Per-set performance (weight & reps may be logged independently later if needed)
 data SetPerformance = SetPerformance
-  { weight :: Maybe Double
-  , reps   :: Maybe Int
+  { weight :: Maybe Weight
+  , reps   :: Maybe Reps
   } deriving (Show, Eq, Generic)
 
 instance ToJSON SetPerformance
@@ -104,7 +125,7 @@ generateMesocycle :: WorkoutTemplate.WorkoutTemplate -> Int -> Mesocycle
 generateMesocycle mesocycleTemplate weeksCount = 
   Mesocycle
   { numWeeks = weeksCount
-  , weeks = [ MesocycleWeek n (map toMesocycleWorkout (WorkoutTemplate.weekDays mesocycleTemplate)) | n <- [1..weeksCount] ]
+  , weeks = [ MesocycleWeek (WeekNumber n) (map toMesocycleWorkout (WorkoutTemplate.weekDays mesocycleTemplate)) | n <- [1..weeksCount] ]
   } -- For each weekday, create a Workout, based on the template
     where
         toMesocycleWorkout :: WorkoutTemplate.Workout -> MesocycleWorkout
@@ -113,18 +134,18 @@ generateMesocycle mesocycleTemplate weeksCount =
             , exercises = map toMesocycleExercise templateExercises
             }
 
-        toMesocycleExercise :: WorkoutTemplate.Exercise -> MesocycleExercise
-        toMesocycleExercise (WorkoutTemplate.Exercise name targetMuscleGroup sets) = MesocycleExercise
-            { exerciseName = name
-            , muscleGroup = targetMuscleGroup
-            , prescribedSets = sets
-            , performedSets = Nothing
-            , prescribedReps = Nothing
-            , performedReps = Nothing
-            , preFeedback = Nothing
-            , postFeedback = Nothing
-            , setPerformances = replicate sets (SetPerformance Nothing Nothing)
-            }
+toMesocycleExercise :: WorkoutTemplate.Exercise -> MesocycleExercise
+toMesocycleExercise (WorkoutTemplate.Exercise name targetMuscleGroup sets) = MesocycleExercise
+          { exerciseName = name
+          , muscleGroup = targetMuscleGroup
+          , prescribedSets = sets
+          , performedSets = Nothing
+          , prescribedReps = Nothing
+          , performedReps = Nothing
+          , preFeedback = Nothing
+          , postFeedback = Nothing
+          , setPerformances = replicate sets (SetPerformance Nothing Nothing)
+          }
 
 
 
@@ -133,19 +154,20 @@ generateMesocycle mesocycleTemplate weeksCount =
 findNextActiveExercise :: Mesocycle -> Maybe (Int, String, MesocycleExercise)
 findNextActiveExercise (Mesocycle { weeks }) = find needsInput allExercises
   where
-    allExercises = [ (weekNumber w, workoutName wo, ex)
+  allExercises = [ (unWeekNumber (weekNumber w), workoutName wo, ex)
                    | w <- weeks
                    , wo <- workouts w
                    , ex <- exercises wo
                    ]
-    needsInput (_, _, ex) = performedSets ex == Nothing || performedReps ex == Nothing
+  needsInput (_, _, ex) = performedSets ex == Nothing || performedReps ex == Nothing
 
 -- | Given the current week and total training weeks, prescribe RIR.
-prescribedRIR :: Int -> Int -> Int
+prescribedRIR :: WeekNumber -> Int -> Int
 prescribedRIR week totalWeeks
-  | week < 1 || week > totalWeeks = error "Week out of range for prescribedRIR"
-  | week < totalWeeks = max 0 (3 - (week - 1))  -- simple ramp: 3,2,1,...
-  | otherwise = 0  -- final week deload target RIR 0 indicates no further progression (could represent test week)
+  | w < 1 || w > totalWeeks = error "Week out of range for prescribedRIR"
+  | w < totalWeeks = max 0 (3 - (w - 1))  -- simple ramp: 3,2,1,...
+  | otherwise = 0
+  where w = unWeekNumber week
 
 -- | Find the most recent completed set for a given exercise name.
 findMostRecentCompleted :: Mesocycle -> String -> Maybe MesocycleExercise

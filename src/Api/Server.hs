@@ -110,7 +110,7 @@ applyLog req@ExerciseLogRequest
   m { Mesocycle.weeks = map updateWeek (Mesocycle.weeks m) }
   where
     updateWeek w
-      | Mesocycle.weekNumber w /= wk = w
+      | Mesocycle.unWeekNumber (Mesocycle.weekNumber w) /= wk = w
       | otherwise = w { Mesocycle.workouts = mapWithIndex updateWorkout (Mesocycle.workouts w) }
 
     updateWorkout i wo
@@ -120,7 +120,7 @@ applyLog req@ExerciseLogRequest
     updateExercise j ex
       | j /= eIx = ex
       | otherwise = ex { Mesocycle.performedSets = Just ls
-                       , Mesocycle.performedReps = Just lr }
+                       , Mesocycle.performedReps = Just (Mesocycle.Reps lr) }
 
     mapWithIndex f = zipWith f [0..]
 
@@ -137,7 +137,7 @@ applySetLog SetLogRequest
   m { Mesocycle.weeks = map updateWeek (Mesocycle.weeks m) }
   where
     updateWeek w
-      | Mesocycle.weekNumber w /= sw = w
+      | Mesocycle.unWeekNumber (Mesocycle.weekNumber w) /= sw = w
       | otherwise = w { Mesocycle.workouts = mapWithIndex updateWorkout (Mesocycle.workouts w) }
 
     updateWorkout i wo
@@ -149,8 +149,8 @@ applySetLog SetLogRequest
       | otherwise =
           let
             upd k sp
-              | k == sIdx = sp { Mesocycle.weight = Just lw
-                               , Mesocycle.reps   = Just setLR }
+              | k == sIdx = sp { Mesocycle.weight = Just (Mesocycle.Weight lw)
+                               , Mesocycle.reps   = Just (Mesocycle.Reps setLR) }
               | otherwise = sp
             newSets = zipWith upd [0..] (Mesocycle.setPerformances ex)
             performedSets' = Just (length (filter (\sp -> Mesocycle.weight sp /= Nothing && Mesocycle.reps sp /= Nothing) newSets))

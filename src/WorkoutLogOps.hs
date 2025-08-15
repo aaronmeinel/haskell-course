@@ -37,10 +37,10 @@ logFeedbackWithPlan _ wlog weekNum workoutName exName preF postF =
 -- | Helper: look up prescription for a set in the Mesocycle plan
 lookupPrescription :: Mesocycle -> Int -> String -> String -> Int -> (Maybe Double, Maybe Int)
 lookupPrescription (Mesocycle { weeks }) weekNum wName exName _setIdx =
-  case filter ((== weekNum) . weekNumber) weeks of
+  case filter ((== WeekNumber weekNum) . weekNumber) weeks of
     (w:_) -> case filter ((== wName) . workoutName) (workouts w) of
       (wo:_) -> case filter ((== exName) . exerciseName) (exercises wo) of
-        (ex:_) -> (Nothing, Mesocycle.prescribedReps ex) -- No prescribed weight in current model
+        (ex:_) -> (Nothing, fmap unReps (Mesocycle.prescribedReps ex)) -- No prescribed weight in current model
         _ -> (Nothing, Nothing)
       _ -> (Nothing, Nothing)
     _ -> (Nothing, Nothing)
@@ -63,8 +63,8 @@ suggestNextPrescriptionFromLog wlog workoutName exName mSetIdx targetRIR percent
           lastReps   = WorkoutLog.performedReps lastSet
           -- Simple rule: if lastReps >= prescribedReps and RIR was hit, increase weight
           nextWeight = case WorkoutLog.prescribedReps lastSet of
-                         Just reps | lastReps >= reps -> lastWeight * (1 + percentIncrease / 100)
-                         _                            -> lastWeight
+                         Just repsTarget | lastReps >= repsTarget -> lastWeight * (1 + percentIncrease / 100)
+                         _                                        -> lastWeight
           -- Suggest reps based on target RIR (could be more sophisticated)
           nextReps = maybe lastReps id (WorkoutLog.prescribedReps lastSet)
       in (nextWeight, nextReps)

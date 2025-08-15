@@ -15,8 +15,8 @@ mkExercise name grp sets presReps perfReps = Mesocycle.MesocycleExercise
   , Mesocycle.muscleGroup = grp
   , Mesocycle.prescribedSets = sets
   , Mesocycle.performedSets = if perfReps /= Nothing then Just sets else Nothing
-  , Mesocycle.prescribedReps = presReps
-  , Mesocycle.performedReps = perfReps
+  , Mesocycle.prescribedReps = fmap Mesocycle.Reps presReps
+  , Mesocycle.performedReps = fmap Mesocycle.Reps perfReps
   , Mesocycle.preFeedback = Nothing
   , Mesocycle.postFeedback = Nothing
   , Mesocycle.setPerformances = replicate sets (Mesocycle.SetPerformance Nothing Nothing)
@@ -38,10 +38,10 @@ main = hspec $ do
             , Mesocycle.postFeedback = Just (Mesocycle.PostExerciseFeedback (Just Mesocycle.NoPain) (Just Mesocycle.ModeratePump) (Just Mesocycle.PrettyGood))
             }
           pushWorkout = Mesocycle.MesocycleWorkout "Push" [benchPress]
-          week1 = Mesocycle.MesocycleWeek 1 [pushWorkout]
+          week1 = Mesocycle.MesocycleWeek (Mesocycle.WeekNumber 1) [pushWorkout]
           meso = Mesocycle.Mesocycle 4 [week1]
       Mesocycle.numWeeks meso `shouldBe` 4
-      Mesocycle.weekNumber (head (Mesocycle.weeks meso)) `shouldBe` 1
+      Mesocycle.unWeekNumber (Mesocycle.weekNumber (head (Mesocycle.weeks meso))) `shouldBe` 1
       Mesocycle.exerciseName (head . Mesocycle.exercises . head . Mesocycle.workouts $ head (Mesocycle.weeks meso)) `shouldBe` "Bench Press"
       Mesocycle.preFeedback benchPress `shouldBe` Just (Mesocycle.PreExerciseFeedback (Just Mesocycle.NeverSore))
 
@@ -74,7 +74,7 @@ main = hspec $ do
     it "round-trips a Mesocycle to JSON and back" $ do
       let benchPress = mkExercise "Bench Press" WorkoutTemplate.Chest 4 (Just 10) Nothing
           pushWorkout = Mesocycle.MesocycleWorkout "Push" [benchPress]
-          week1 = Mesocycle.MesocycleWeek 1 [pushWorkout]
+          week1 = Mesocycle.MesocycleWeek (Mesocycle.WeekNumber 1) [pushWorkout]
           meso = Mesocycle.Mesocycle 1 [week1]
       path <- fmap (++ "/test_mesocycle.json") getTemporaryDirectory
       saveMesocycle path meso
@@ -87,14 +87,14 @@ main = hspec $ do
       let ex1 = (mkExercise "Bench Press" WorkoutTemplate.Chest 3 (Just 10) (Just 10))
           ex2 = mkExercise "Squat" WorkoutTemplate.Quads 4 (Just 8) Nothing
           workout = Mesocycle.MesocycleWorkout "Day 1" [ex1, ex2]
-          week = Mesocycle.MesocycleWeek 1 [workout]
+          week = Mesocycle.MesocycleWeek (Mesocycle.WeekNumber 1) [workout]
           meso = Mesocycle.Mesocycle 1 [week]
       Mesocycle.findNextActiveExercise meso `shouldBe` Just (1, "Day 1", ex2)
 
     it "returns Nothing if all exercises are complete" $ do
       let ex1 = (mkExercise "Bench Press" WorkoutTemplate.Chest 3 (Just 10) (Just 10))
           workout = Mesocycle.MesocycleWorkout "Day 1" [ex1]
-          week = Mesocycle.MesocycleWeek 1 [workout]
+          week = Mesocycle.MesocycleWeek (Mesocycle.WeekNumber 1) [workout]
           meso = Mesocycle.Mesocycle 1 [week]
       Mesocycle.findNextActiveExercise meso `shouldBe` Nothing
 
@@ -111,8 +111,8 @@ main = hspec $ do
           ex3 = mkExercise "Squat" WorkoutTemplate.Quads 4 (Just 8) (Just 8)
           workout1 = Mesocycle.MesocycleWorkout "Day 1" [ex1, ex3]
           workout2 = Mesocycle.MesocycleWorkout "Day 2" [ex2]
-          week1 = Mesocycle.MesocycleWeek 1 [workout1]
-          week2 = Mesocycle.MesocycleWeek 2 [workout2]
+          week1 = Mesocycle.MesocycleWeek (Mesocycle.WeekNumber 1) [workout1]
+          week2 = Mesocycle.MesocycleWeek (Mesocycle.WeekNumber 2) [workout2]
           meso = Mesocycle.Mesocycle 2 [week1, week2]
       Mesocycle.findMostRecentCompleted meso "Bench Press" `shouldBe` Just ex2
       Mesocycle.findMostRecentCompleted meso "Squat" `shouldBe` Just ex3
@@ -121,7 +121,7 @@ main = hspec $ do
     it "ignores incomplete sets" $ do
       let ex1 = mkExercise "Bench Press" WorkoutTemplate.Chest 3 (Just 10) Nothing
           workout = Mesocycle.MesocycleWorkout "Day 1" [ex1]
-          week = Mesocycle.MesocycleWeek 1 [workout]
+          week = Mesocycle.MesocycleWeek (Mesocycle.WeekNumber 1) [workout]
           meso = Mesocycle.Mesocycle 1 [week]
       Mesocycle.findMostRecentCompleted meso "Bench Press" `shouldBe` Nothing
 

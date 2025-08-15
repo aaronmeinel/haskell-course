@@ -99,14 +99,15 @@ fromDomainExercise ex = ExerciseDTO
   { exerciseName = Domain.exerciseName ex
   , muscleGroup = show (Domain.muscleGroup ex)
   , prescribedSets = Domain.prescribedSets ex
-  , prescribedReps = Domain.prescribedReps ex
+  , prescribedReps = fmap Domain.unReps (Domain.prescribedReps ex)
   , performedSets = Domain.performedSets ex
-  , performedReps = Domain.performedReps ex
+  , performedReps = fmap Domain.unReps (Domain.performedReps ex)
   , sets = map fromDomainSet (Domain.setPerformances ex)
   }
 
 fromDomainSet :: Domain.SetPerformance -> SetPerfDTO
-fromDomainSet sp = SetPerfDTO { weight = Domain.weight sp, reps = Domain.reps sp }
+fromDomainSet sp = SetPerfDTO { weight = fmap Domain.unWeight (Domain.weight sp)
+                              , reps = fmap Domain.unReps (Domain.reps sp) }
 
 fromDomainWorkout :: Domain.MesocycleWorkout -> WorkoutDTO
 fromDomainWorkout w = WorkoutDTO
@@ -116,7 +117,7 @@ fromDomainWorkout w = WorkoutDTO
 
 fromDomainWeek :: Domain.MesocycleWeek -> WeekDTO
 fromDomainWeek w = WeekDTO
-  { weekNumber = Domain.weekNumber w
+  { weekNumber = Domain.unWeekNumber (Domain.weekNumber w)
   , workouts = map fromDomainWorkout (Domain.workouts w)
   }
 
