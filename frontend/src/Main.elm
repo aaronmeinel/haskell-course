@@ -288,6 +288,36 @@ getWorkout wIdx wkIdx plan =
                 [] -> Nothing
         [] -> Nothing
 
+-- Find the first (weekIdx, workoutIdx) where at least one exercise not fully logged.
+findFirstIncomplete : Plan -> ( Int, Int )
+findFirstIncomplete plan =
+    let
+        isLogged : Exercise -> Bool
+        isLogged ex =
+            case ex.sets of
+                [] -> False
+                ss -> List.all (\s -> s.reps /= Nothing && s.weight /= Nothing) ss
+
+        scanWeeks : Int -> List Week -> ( Int, Int )
+        scanWeeks wIdx weeks =
+            case weeks of
+                [] -> ( 0, 0 ) -- default fallback
+                w :: restW ->
+                    case scanWorkouts wIdx 0 w.workouts of
+                        Just wkIdx -> ( wIdx, wkIdx )
+                        Nothing -> scanWeeks (wIdx + 1) restW
+        scanWorkouts : Int -> Int -> List Workout -> Maybe Int
+        scanWorkouts wIdx wkIdx workouts =
+            case workouts of
+                [] -> Nothing
+                wo :: restWo ->
+                    if List.all isLogged wo.exercises then
+                        scanWorkouts wIdx (wkIdx + 1) restWo
+                    else
+                        Just wkIdx
+    in
+    scanWeeks 0 plan.weeks
+
 viewWeek : Int -> Week -> List (Html Msg)
 viewWeek wIdx week =
     let
