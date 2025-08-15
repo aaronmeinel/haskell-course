@@ -127,6 +127,10 @@ test-suite haskell-course-test
     other-modules:    WorkoutLogOpsSpec
                     , WorkoutLog
                     , WorkoutLogOps
+                    , Mesocycle
+                    , MesocyclePersistence
+                    , WorkoutLogPersistence
+                    , WorkoutTemplate
     -- other-extensions:
     type:             exitcode-stdio-1.0
     hs-source-dirs:   test

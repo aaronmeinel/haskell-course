@@ -2,7 +2,6 @@ module Main where
 
 import Test.Hspec
 import Data.Yaml (decodeFileEither, ParseException)
-import Data.Either (isRight)
 import qualified WorkoutTemplate
 import qualified Mesocycle
 import MesocyclePersistence (saveMesocycle, loadMesocycle)
@@ -129,7 +128,7 @@ main = hspec $ do
     it "suggests a 2.5% increase from 100 as 102.5" $ Mesocycle.suggestNextPrescription 100 2.5 `shouldBe` 102.5
     it "suggests a 5% increase from 200 as 210.0" $ Mesocycle.suggestNextPrescription 200 5 `shouldBe` 210.0
     it "suggests a 0% increase returns the same value (Double)" $ Mesocycle.suggestNextPrescription 150 0 `shouldBe` 150.0
-    it "can be used for reps by rounding to Int" $ round (Mesocycle.suggestNextPrescription 99 2.5) `shouldBe` 101
+  it "can be used for reps by rounding to Int" $ (round (Mesocycle.suggestNextPrescription 99 2.5) :: Int) `shouldBe` 101
 
   WorkoutLogOpsSpec.spec
 
