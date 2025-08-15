@@ -8,6 +8,7 @@ import Html.Events exposing (onClick, onInput)
 import Json.Encode as E
 import Http
 import Json.Decode as D
+import Dict exposing (Dict)
 
 -- MODEL
 
@@ -94,14 +95,22 @@ type alias SetInput =
     , logged : Bool
     }
 
-type alias ExerciseInput =
-    { sets : List SetInput }
+-- We store per-set input state in a dictionary keyed by weekIdx:workoutIdx:exerciseIdx:setIdx
+-- This prevents different workouts that have an exercise at the same index from sharing input state.
+type alias Inputs = Dict String SetInput
+
+type alias Submitting =
+    { weekIdx : Int
+    , workoutIdx : Int
+    , exerciseIdx : Int
+    , setIdx : Int
+    }
 
 type alias Model =
     { status : Status
     , route : Route
-    , inputs : List ExerciseInput
-    , logSubmitting : Maybe Int -- exercise index currently submitting
+    , inputs : Inputs
+    , logSubmitting : Maybe Submitting -- currently submitting set
     , logError : Maybe String
     , currentWeekIndex : Int
     , currentWorkoutIndex : Int
@@ -110,7 +119,7 @@ type alias Model =
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { status = Loading, route = Current, inputs = [], logSubmitting = Nothing, logError = Nothing, currentWeekIndex = 0, currentWorkoutIndex = 0 }
+    ( { status = Loading, route = Current, inputs = Dict.empty, logSubmitting = Nothing, logError = Nothing, currentWeekIndex = 0, currentWorkoutIndex = 0 }
     , fetchPlan
     )
 
@@ -131,23 +140,9 @@ update msg model =
     case msg of
         GotPlan (Ok plan) ->
             let
-                initInputs =
-                    case plan.weeks of
-                        w :: _ ->
-                            case w.workouts of
-                                wk :: _ ->
-                                    List.map
-                                        (\ex ->
-                                            { sets =
-                                                ex.sets
-                                                    |> List.map (\s -> { weight = maybeToStrFloat s.weight, reps = maybeToStr s.reps, logged = (s.weight /= Nothing && s.reps /= Nothing) })
-                                            }
-                                        )
-                                        wk.exercises
-                                [] -> []
-                        [] -> []
+                inputsDict = buildInputsFromPlan plan
             in
-            ( { model | status = Loaded plan, inputs = initInputs }, Cmd.none )
+            ( { model | status = Loaded plan, inputs = inputsDict }, Cmd.none )
 
         GotPlan (Err err) ->
             ( { model | status = Failure (debugHttp err) }, Cmd.none )
@@ -161,24 +156,37 @@ update msg model =
             )
 
         EditSetWeight exIdx setIdx txt ->
-            ( { model | inputs = updateNested exIdx setIdx (\s -> { s | weight = txt }) model.inputs }, Cmd.none )
+            let
+                key = inputKey model.currentWeekIndex model.currentWorkoutIndex exIdx setIdx
+                updated = Dict.update key (\maybeSI -> Just (updateWeight txt maybeSI)) model.inputs
+            in
+            ( { model | inputs = updated }, Cmd.none )
 
         EditSetReps exIdx setIdx txt ->
-            ( { model | inputs = updateNested exIdx setIdx (\s -> { s | reps = txt }) model.inputs }, Cmd.none )
+            let
+                key = inputKey model.currentWeekIndex model.currentWorkoutIndex exIdx setIdx
+                updated = Dict.update key (\maybeSI -> Just (updateReps txt maybeSI)) model.inputs
+            in
+            ( { model | inputs = updated }, Cmd.none )
 
         LogSet exIdx setIdx ->
             case model.status of
                 Loaded plan ->
                     let
                         body = buildSetLogBody model plan exIdx setIdx model.inputs
+                        submittingKey = { weekIdx = model.currentWeekIndex, workoutIdx = model.currentWorkoutIndex, exerciseIdx = exIdx, setIdx = setIdx }
                     in
-                    ( { model | logSubmitting = Just exIdx, logError = Nothing }
+                    ( { model | logSubmitting = Just submittingKey, logError = Nothing }
                     , postSetLog exIdx setIdx body
                     )
                 _ -> ( model, Cmd.none )
 
         LoggedSet exIdx setIdx (Ok _) ->
-            ( { model | inputs = updateNested exIdx setIdx (\s -> { s | logged = True }) model.inputs, logSubmitting = Nothing }
+            let
+                key = inputKey model.currentWeekIndex model.currentWorkoutIndex exIdx setIdx
+                updated = Dict.update key (\maybeSI -> Just (markLogged maybeSI)) model.inputs
+            in
+            ( { model | inputs = updated, logSubmitting = Nothing }
             , fetchPlan
             )
 
@@ -314,26 +322,28 @@ viewExerciseLog : Model -> Int -> Exercise -> Html Msg
 viewExerciseLog model exIdx ex =
     let
         rirLabel = "RIR 3 (initial)"
-        exerciseInput =
-            case List.drop exIdx model.inputs of
-                rec :: _ -> Just rec
-                [] -> Nothing
         completed =
-            case exerciseInput of
-                Just rec -> List.all .logged rec.sets
-                Nothing -> False
+            let
+                setStatuses =
+                    ex.sets
+                        |> List.indexedMap (\setIdx _ ->
+                            let si = getSetInput model.currentWeekIndex model.currentWorkoutIndex exIdx setIdx model.inputs
+                            in si.logged
+                           )
+            in
+            List.all identity setStatuses
     in
     li [ class "flex flex-col gap-3 rounded-xl border border-slate-700/40 bg-slate-800/40 p-4" ]
         [ span [ class "text-sm font-medium text-sky-200" ] [ text ex.exerciseName ]
         , span [ class "text-[11px] uppercase tracking-wide text-slate-500" ] [ text rirLabel ]
         , if completed then span [ class "text-[11px] text-emerald-400 font-medium" ] [ text "All sets logged" ] else text ""
-        , div [ class "flex flex-col gap-2" ] (List.indexedMap (viewSetRow model exIdx) ex.sets)
+    , div [ class "flex flex-col gap-2" ] (List.indexedMap (viewSetRow model exIdx) ex.sets)
         ]
 
 viewSetRow : Model -> Int -> Int -> SetPerf -> Html Msg
 viewSetRow model exIdx setIdx _ =
     let
-        inputRec = getSetInput exIdx setIdx model.inputs
+        inputRec = getSetInput model.currentWeekIndex model.currentWorkoutIndex exIdx setIdx model.inputs
         wVal = inputRec.weight
         rVal = inputRec.reps
         logged = inputRec.logged
@@ -371,33 +381,70 @@ setLogButton exIdx setIdx ready logged =
         ]
         [ text (if logged then "Done" else "Log") ]
 
-updateNested : Int -> Int -> (SetInput -> SetInput) -> List ExerciseInput -> List ExerciseInput
-updateNested exIdx setIdx f inputs =
-    List.indexedMap
-        (\i exInput ->
-            if i == exIdx then
-                { exInput | sets = List.indexedMap (\j s -> if j == setIdx then f s else s) exInput.sets }
-            else
-                exInput
-        )
-        inputs
+-- INPUT STATE HELPERS
 
-getSetInput : Int -> Int -> List ExerciseInput -> SetInput
-getSetInput exIdx setIdx inputs =
-    case List.drop exIdx inputs of
-        exInput :: _ ->
-            case List.drop setIdx exInput.sets of
-                s :: _ -> s
-                [] -> { weight = "", reps = "", logged = False }
-        [] -> { weight = "", reps = "", logged = False }
+inputKey : Int -> Int -> Int -> Int -> String
+inputKey wIdx wkIdx exIdx setIdx =
+    String.fromInt wIdx ++ ":" ++ String.fromInt wkIdx ++ ":" ++ String.fromInt exIdx ++ ":" ++ String.fromInt setIdx
 
-buildSetLogBody : Model -> Plan -> Int -> Int -> List ExerciseInput -> E.Value
+defaultSetInput : SetInput
+defaultSetInput = { weight = "", reps = "", logged = False }
+
+getSetInput : Int -> Int -> Int -> Int -> Inputs -> SetInput
+getSetInput wIdx wkIdx exIdx setIdx inputs =
+    Dict.get (inputKey wIdx wkIdx exIdx setIdx) inputs |> Maybe.withDefault defaultSetInput
+
+updateWeight : String -> Maybe SetInput -> SetInput
+updateWeight txt maybeSI =
+    case maybeSI of
+        Just si -> { si | weight = txt }
+        Nothing -> { defaultSetInput | weight = txt }
+
+updateReps : String -> Maybe SetInput -> SetInput
+updateReps txt maybeSI =
+    case maybeSI of
+        Just si -> { si | reps = txt }
+        Nothing -> { defaultSetInput | reps = txt }
+
+markLogged : Maybe SetInput -> SetInput
+markLogged maybeSI =
+    case maybeSI of
+        Just si -> { si | logged = True }
+        Nothing -> { defaultSetInput | logged = True }
+
+buildInputsFromPlan : Plan -> Inputs
+buildInputsFromPlan plan =
+    let
+        weekList =
+            plan.weeks
+                |> List.indexedMap (\wIdx w ->
+                    w.workouts
+                        |> List.indexedMap (\wkIdx wkout ->
+                            wkout.exercises
+                                |> List.indexedMap (\exIdx ex ->
+                                    ex.sets
+                                        |> List.indexedMap (\setIdx s ->
+                                            ( inputKey wIdx wkIdx exIdx setIdx
+                                            , { weight = maybeToStrFloat s.weight
+                                              , reps = maybeToStr s.reps
+                                              , logged = (s.weight /= Nothing && s.reps /= Nothing)
+                                              }
+                                            )
+                                        )
+                                )
+                        )
+                )
+                |> List.concatMap (List.concatMap List.concat)
+    in
+    Dict.fromList weekList
+
+buildSetLogBody : Model -> Plan -> Int -> Int -> Inputs -> E.Value
 buildSetLogBody model plan exIdx setIdx inputs =
     let ( weekNum, workoutIndex ) =
             case getWorkout model.currentWeekIndex model.currentWorkoutIndex plan of
                 Just ( wn, _ ) -> ( wn, model.currentWorkoutIndex )
                 Nothing -> ( 1, 0 )
-        setInput = getSetInput exIdx setIdx inputs
+        setInput = getSetInput model.currentWeekIndex model.currentWorkoutIndex exIdx setIdx inputs
         weightVal = String.toFloat setInput.weight |> Maybe.withDefault 0
         repsVal = String.toInt setInput.reps |> Maybe.withDefault 0
     in
