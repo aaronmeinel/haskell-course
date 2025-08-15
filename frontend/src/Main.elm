@@ -11,24 +11,34 @@ import Json.Decode as D
 
 -- MODEL
 
+type alias SetPerf =
+    { weight : Maybe Float
+    , reps : Maybe Int
+    }
+
 type alias Exercise =
     { exerciseName : String
     , muscleGroup : String
     , prescribedSets : Int
     , prescribedReps : Maybe Int
-    , performedSets : Maybe Int
-    , performedReps : Maybe Int
+    , sets : List SetPerf
     }
+
+
+setDecoder : D.Decoder SetPerf
+setDecoder =
+    D.map2 SetPerf
+        (D.field "weight" (D.nullable D.float))
+        (D.field "reps" (D.nullable D.int))
 
 exerciseDecoder : D.Decoder Exercise
 exerciseDecoder =
-    D.map6 Exercise
+    D.map5 Exercise
         (D.field "exerciseName" D.string)
         (D.field "muscleGroup" D.string)
         (D.field "prescribedSets" D.int)
         (D.field "prescribedReps" (D.nullable D.int))
-        (D.field "performedSets" (D.nullable D.int))
-        (D.field "performedReps" (D.nullable D.int))
+        (D.field "sets" (D.list setDecoder))
 
 
 type alias Workout =
@@ -78,11 +88,14 @@ type Status
     | Failure String
     | Loaded Plan
 
-type alias ExerciseInput =
-    { sets : String
+type alias SetInput =
+    { weight : String
     , reps : String
     , logged : Bool
     }
+
+type alias ExerciseInput =
+    { sets : List SetInput }
 
 type alias Model =
     { status : Status
@@ -107,11 +120,11 @@ init _ =
 type Msg
     = GotPlan (Result Http.Error Plan)
     | SetRoute Route
-    | SetCurrent Int Int -- weekIdx workoutIdx
-    | EditSets Int String
-    | EditReps Int String
-    | LogExercise Int
-    | LoggedExercise Int (Result Http.Error ())
+    | SetCurrent Int Int
+    | EditSetWeight Int Int String
+    | EditSetReps Int Int String
+    | LogSet Int Int
+    | LoggedSet Int Int (Result Http.Error ())
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -122,7 +135,15 @@ update msg model =
                     case plan.weeks of
                         w :: _ ->
                             case w.workouts of
-                                wk :: _ -> List.indexedMap (\_ ex -> { sets = maybeToStr ex.performedSets, reps = maybeToStr ex.performedReps, logged = (ex.performedSets /= Nothing && ex.performedReps /= Nothing) }) wk.exercises
+                                wk :: _ ->
+                                    List.map
+                                        (\ex ->
+                                            { sets =
+                                                ex.sets
+                                                    |> List.map (\s -> { weight = maybeToStrFloat s.weight, reps = maybeToStr s.reps, logged = (s.weight /= Nothing && s.reps /= Nothing) })
+                                            }
+                                        )
+                                        wk.exercises
                                 [] -> []
                         [] -> []
             in
@@ -139,29 +160,29 @@ update msg model =
             , Cmd.none
             )
 
-        EditSets idx txt ->
-            ( { model | inputs = updateInput idx (\i -> { i | sets = txt }) model.inputs }, Cmd.none )
+        EditSetWeight exIdx setIdx txt ->
+            ( { model | inputs = updateNested exIdx setIdx (\s -> { s | weight = txt }) model.inputs }, Cmd.none )
 
-        EditReps idx txt ->
-            ( { model | inputs = updateInput idx (\i -> { i | reps = txt }) model.inputs }, Cmd.none )
+        EditSetReps exIdx setIdx txt ->
+            ( { model | inputs = updateNested exIdx setIdx (\s -> { s | reps = txt }) model.inputs }, Cmd.none )
 
-        LogExercise idx ->
+        LogSet exIdx setIdx ->
             case model.status of
                 Loaded plan ->
                     let
-                        body = buildLogBody model plan idx model.inputs
+                        body = buildSetLogBody model plan exIdx setIdx model.inputs
                     in
-                    ( { model | logSubmitting = Just idx, logError = Nothing }
-                    , postLog idx body
+                    ( { model | logSubmitting = Just exIdx, logError = Nothing }
+                    , postSetLog exIdx setIdx body
                     )
                 _ -> ( model, Cmd.none )
 
-        LoggedExercise idx (Ok _) ->
-            ( { model | inputs = updateInput idx (\i -> { i | logged = True }) model.inputs, logSubmitting = Nothing }
-            , fetchPlan -- refresh plan (could optimize later)
+        LoggedSet exIdx setIdx (Ok _) ->
+            ( { model | inputs = updateNested exIdx setIdx (\s -> { s | logged = True }) model.inputs, logSubmitting = Nothing }
+            , fetchPlan
             )
 
-        LoggedExercise _ (Err e) ->
+        LoggedSet _ _ (Err e) ->
             ( { model | logSubmitting = Nothing, logError = Just (debugHttp e) }, Cmd.none )
 
 
@@ -169,12 +190,12 @@ fetchPlan : Cmd Msg
 fetchPlan =
     Http.get { url = "/api/plan", expect = Http.expectJson GotPlan planDecoder }
 
-postLog : Int -> E.Value -> Cmd Msg
-postLog idx body =
+postSetLog : Int -> Int -> E.Value -> Cmd Msg
+postSetLog exIdx setIdx body =
     Http.post
-        { url = "/api/log"
+        { url = "/api/logSet"
         , body = Http.jsonBody body
-        , expect = Http.expectWhatever (\result -> LoggedExercise idx result)
+        , expect = Http.expectWhatever (\result -> LoggedSet exIdx setIdx result)
         }
 
 
@@ -290,89 +311,104 @@ viewExercise ex =
         [ text (ex.exerciseName ++ " · sets " ++ String.fromInt ex.prescribedSets) ]
 
 viewExerciseLog : Model -> Int -> Exercise -> Html Msg
-viewExerciseLog model idx ex =
+viewExerciseLog model exIdx ex =
     let
-        -- We treat initial RIR as prescribed "goal" label
         rirLabel = "RIR 3 (initial)"
-        input = getInput idx model.inputs
-        setsVal = input.sets
-        repsVal = input.reps
-        isLogged = input.logged
-        submitting = model.logSubmitting == Just idx
-        ready = (String.length setsVal > 0) && (String.length repsVal > 0) && not isLogged && not submitting
+        exerciseInput =
+            case List.drop exIdx model.inputs of
+                rec :: _ -> Just rec
+                [] -> Nothing
+        completed =
+            case exerciseInput of
+                Just rec -> List.all .logged rec.sets
+                Nothing -> False
     in
-    li [ class "flex flex-col gap-2 rounded-xl border border-slate-700/40 bg-slate-800/40 p-4" ]
+    li [ class "flex flex-col gap-3 rounded-xl border border-slate-700/40 bg-slate-800/40 p-4" ]
         [ span [ class "text-sm font-medium text-sky-200" ] [ text ex.exerciseName ]
         , span [ class "text-[11px] uppercase tracking-wide text-slate-500" ] [ text rirLabel ]
-        , div [ class "flex flex-wrap items-end gap-3" ]
-            [ inputField idx "Sets" setsVal isLogged submitting EditSets
-            , inputField idx "Reps" repsVal isLogged submitting EditReps
-            , logButton idx ready isLogged submitting
-            ]
-        , if isLogged then span [ class "text-[11px] text-emerald-400 font-medium" ] [ text "Logged" ] else text ""
+        , if completed then span [ class "text-[11px] text-emerald-400 font-medium" ] [ text "All sets logged" ] else text ""
+        , div [ class "flex flex-col gap-2" ] (List.indexedMap (viewSetRow model exIdx) ex.sets)
         ]
 
-inputField : Int -> String -> String -> Bool -> Bool -> (Int -> String -> Msg) -> Html Msg
-inputField idx label current isLogged submitting toMsg =
+viewSetRow : Model -> Int -> Int -> SetPerf -> Html Msg
+viewSetRow model exIdx setIdx _ =
     let
-        ph = label
+        inputRec = getSetInput exIdx setIdx model.inputs
+        wVal = inputRec.weight
+        rVal = inputRec.reps
+        logged = inputRec.logged
+        ready = (String.length wVal > 0) && (String.length rVal > 0) && not logged
     in
-    div [ class "flex flex-col w-20" ]
+    div [ class "flex items-end gap-3" ]
+        [ span [ class "text-xs w-10 text-slate-400" ] [ text ("Set " ++ String.fromInt (setIdx + 1)) ]
+        , numberField wVal logged (EditSetWeight exIdx setIdx) "Weight"
+        , numberField rVal logged (EditSetReps exIdx setIdx) "Reps"
+        , setLogButton exIdx setIdx ready logged
+        ]
+
+numberField : String -> Bool -> (String -> Msg) -> String -> Html Msg
+numberField current disabledAll toMsg label =
+    div [ class "flex flex-col w-24" ]
         [ span [ class "text-[10px] tracking-wide text-slate-400 mb-1" ] [ text label ]
         , input
             [ class "rounded-md bg-slate-900/60 border border-slate-600/40 focus:border-sky-400/60 focus:outline-none px-2 py-1 text-sm"
             , type_ "number"
-            , placeholder ph
+            , placeholder label
             , value current
-            , disabled (isLogged || submitting)
-            , onInput (toMsg idx)
+            , disabled disabledAll
+            , onInput toMsg
             ]
             []
         ]
 
-logButton : Int -> Bool -> Bool -> Bool -> Html Msg
-logButton idx ready isLogged submitting =
+setLogButton : Int -> Int -> Bool -> Bool -> Html Msg
+setLogButton exIdx setIdx ready logged =
     button
-    [ class ("mt-4 h-9 px-4 inline-flex items-center rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed " ++
-        (if isLogged then "bg-emerald-600 hover:bg-emerald-500" else "bg-sky-600 hover:bg-sky-500"))
-    , disabled (not ready)
-    , onClick (LogExercise idx)
+        [ class ("mt-4 h-8 px-3 inline-flex items-center rounded-md text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed " ++
+            (if logged then "bg-emerald-600" else "bg-sky-600 hover:bg-sky-500"))
+        , disabled (not ready)
+        , onClick (LogSet exIdx setIdx)
         ]
-    [ text (if isLogged then "Done" else if submitting then "..." else "Log") ]
+        [ text (if logged then "Done" else "Log") ]
 
-updateInput : Int -> (ExerciseInput -> ExerciseInput) -> List ExerciseInput -> List ExerciseInput
-updateInput idx f inputs =
-    List.indexedMap (\i it -> if i == idx then f it else it) inputs
+updateNested : Int -> Int -> (SetInput -> SetInput) -> List ExerciseInput -> List ExerciseInput
+updateNested exIdx setIdx f inputs =
+    List.indexedMap
+        (\i exInput ->
+            if i == exIdx then
+                { exInput | sets = List.indexedMap (\j s -> if j == setIdx then f s else s) exInput.sets }
+            else
+                exInput
+        )
+        inputs
 
-getInput : Int -> List ExerciseInput -> ExerciseInput
-getInput idx inputs =
-    case List.drop idx inputs of
-        rec :: _ -> rec
-        [] -> { sets = "", reps = "", logged = False }
+getSetInput : Int -> Int -> List ExerciseInput -> SetInput
+getSetInput exIdx setIdx inputs =
+    case List.drop exIdx inputs of
+        exInput :: _ ->
+            case List.drop setIdx exInput.sets of
+                s :: _ -> s
+                [] -> { weight = "", reps = "", logged = False }
+        [] -> { weight = "", reps = "", logged = False }
 
-buildLogBody : Model -> Plan -> Int -> List ExerciseInput -> E.Value
-buildLogBody model plan idx inputs =
-    let
-        ( weekNum, workoutIndex ) =
+buildSetLogBody : Model -> Plan -> Int -> Int -> List ExerciseInput -> E.Value
+buildSetLogBody model plan exIdx setIdx inputs =
+    let ( weekNum, workoutIndex ) =
             case getWorkout model.currentWeekIndex model.currentWorkoutIndex plan of
                 Just ( wn, _ ) -> ( wn, model.currentWorkoutIndex )
                 Nothing -> ( 1, 0 )
-        sets =
-            case List.drop idx inputs |> List.head of
-                Just rec -> rec.sets
-                Nothing -> "0"
-        reps =
-            case List.drop idx inputs |> List.head of
-                Just rec -> rec.reps
-                Nothing -> "0"
+        setInput = getSetInput exIdx setIdx inputs
+        weightVal = String.toFloat setInput.weight |> Maybe.withDefault 0
+        repsVal = String.toInt setInput.reps |> Maybe.withDefault 0
     in
     E.object
     [ ( "week", E.int weekNum )
     , ( "workoutIndex", E.int workoutIndex )
-        , ( "exerciseIndex", E.int idx )
-        , ( "loggedSets", E.int (String.toInt sets |> Maybe.withDefault 0) )
-        , ( "loggedReps", E.int (String.toInt reps |> Maybe.withDefault 0) )
-        ]
+    , ( "exerciseIndex", E.int exIdx )
+    , ( "setIndex", E.int setIdx )
+    , ( "loggedWeight", E.float weightVal )
+    , ( "loggedReps", E.int repsVal )
+    ]
 
 
 loaderIcon : Html msg
@@ -417,4 +453,10 @@ maybeToStr : Maybe Int -> String
 maybeToStr m =
     case m of
         Just n -> String.fromInt n
+        Nothing -> ""
+
+maybeToStrFloat : Maybe Float -> String
+maybeToStrFloat m =
+    case m of
+        Just n -> String.fromFloat n
         Nothing -> ""

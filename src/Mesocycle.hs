@@ -4,7 +4,7 @@ module Mesocycle where
 
 import GHC.Generics (Generic)
 import Data.List (find)
-import Data.Aeson (ToJSON, FromJSON, encode, decode)
+import Data.Aeson (ToJSON, FromJSON)
 
 import qualified WorkoutTemplate
 
@@ -78,12 +78,21 @@ data MesocycleWorkout = MesocycleWorkout
   , exercises     :: [MesocycleExercise]
   } deriving (Show, Eq, Generic)
 
+data SetPerformance = SetPerformance
+  { weight :: Maybe Double
+  , reps   :: Maybe Int
+  } deriving (Show, Eq, Generic)
+
+instance ToJSON SetPerformance
+instance FromJSON SetPerformance
+
 data MesocycleExercise = MesocycleExercise
   { exerciseName     :: String
   , muscleGroup      :: WorkoutTemplate.MuscleGroup
   , prescribedSets   :: Int
-  , performedSets    :: Maybe Int
+  , sets             :: [SetPerformance] -- length == prescribedSets
   , prescribedReps   :: Maybe Int
+  , performedSets    :: Maybe Int -- deprecated aggregated fields kept for backward compatibility
   , performedReps    :: Maybe Int
   , preFeedback      :: Maybe PreExerciseFeedback
   , postFeedback     :: Maybe PostExerciseFeedback
@@ -104,16 +113,17 @@ generateMesocycle mesocycleTemplate weeksCount =
             }
 
         toMesocycleExercise :: WorkoutTemplate.Exercise -> MesocycleExercise
-        toMesocycleExercise (WorkoutTemplate.Exercise name targetMuscleGroup sets) = MesocycleExercise
-            { exerciseName = name
-            , muscleGroup = targetMuscleGroup
-            , prescribedSets = sets
-            , performedSets = Nothing
-            , prescribedReps = Nothing
-            , performedReps = Nothing
-            , preFeedback = Nothing
-            , postFeedback = Nothing
-            }
+        toMesocycleExercise (WorkoutTemplate.Exercise name targetMuscleGroup setsN) = MesocycleExercise
+          { exerciseName = name
+          , muscleGroup = targetMuscleGroup
+          , prescribedSets = setsN
+          , sets = replicate setsN (SetPerformance Nothing Nothing)
+          , prescribedReps = Nothing
+          , performedSets = Nothing
+          , performedReps = Nothing
+          , preFeedback = Nothing
+          , postFeedback = Nothing
+          }
 
 
 
@@ -127,7 +137,7 @@ findNextActiveExercise (Mesocycle { weeks }) = find needsInput allExercises
                    , wo <- workouts w
                    , ex <- exercises wo
                    ]
-    needsInput (_, _, ex) = performedSets ex == Nothing || performedReps ex == Nothing
+    needsInput (_, _, ex) = any (\(SetPerformance w r) -> w == Nothing || r == Nothing) (sets ex)
 
 -- | Given the current week and total training weeks, prescribe RIR.
 prescribedRIR :: Int -> Int -> Int
@@ -140,12 +150,11 @@ prescribedRIR week totalWeeks
 findMostRecentCompleted :: Mesocycle -> String -> Maybe MesocycleExercise
 findMostRecentCompleted (Mesocycle { weeks }) exName =
   let allExercises = [ ex
-                     | w <- reverse weeks
-                     , wo <- reverse (workouts w)
+                     | wWeek <- reverse weeks
+                     , wo <- reverse (workouts wWeek)
                      , ex <- reverse (exercises wo)
                      , exerciseName ex == exName
-                     , performedSets ex /= Nothing
-                     , performedReps ex /= Nothing
+                     , all (\(SetPerformance wv rv) -> wv /= Nothing && rv /= Nothing) (sets ex)
                      ]
   in case allExercises of
        (x:_) -> Just x
@@ -162,5 +171,5 @@ suggestNextPrescription prevValue percent =
 
 -- | Round a value to the nearest step (e.g., 1.25 for kg plates)
 roundToStep :: Double -> Double -> Double
-roundToStep value step = fromIntegral (round (value / step)) * step
+roundToStep value step = (fromInteger (round (value / step) :: Integer)) * step
 

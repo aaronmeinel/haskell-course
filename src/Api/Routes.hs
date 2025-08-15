@@ -15,7 +15,7 @@ import Data.Aeson (ToJSON)
 type APIV1 = 
     "version" :> Get '[JSON] VersionResponse
   :<|> "plan"    :> Get '[JSON] PlanDTO
-  :<|> "log"     :> ReqBody '[JSON] ExerciseLogRequest :> Post '[JSON] LogResponse
+  :<|> "logSet"  :> ReqBody '[JSON] SetLogRequest :> Post '[JSON] LogResponse
 
 -- Wrap version response to allow extension later
 newtype VersionResponse = VersionResponse { apiVersion :: Int }

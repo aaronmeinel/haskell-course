@@ -10,12 +10,13 @@ import qualified WorkoutTemplate
 -- (no extra imports needed currently)
 
 -- Logging DTOs
-data ExerciseLogRequest = ExerciseLogRequest
+data SetLogRequest = SetLogRequest
   { week :: Int
   , workoutIndex :: Int
   , exerciseIndex :: Int
-  , loggedSets :: Int
-  , loggedReps :: Int
+  , setIndex :: Int
+  , loggedWeight :: Maybe Double
+  , loggedReps :: Maybe Int
   } deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
 data LogResponse = LogResponse
@@ -27,13 +28,17 @@ data LogResponse = LogResponse
 -- If later we need custom mapping we can adjust.
 
 -- DTOs intentionally exclude performed* and feedback fields 
+data SetDTO = SetDTO
+  { weight :: Maybe Double
+  , reps :: Maybe Int
+  } deriving (Show, Eq, Generic, ToJSON, FromJSON)
+
 data ExerciseDTO = ExerciseDTO
   { exerciseName :: String
   , muscleGroup :: String
   , prescribedSets :: Int
   , prescribedReps :: Maybe Int
-  , performedSets :: Maybe Int
-  , performedReps :: Maybe Int
+  , sets :: [SetDTO]
   } deriving (Show, Eq, Generic, ToJSON, FromJSON)
 
 data WorkoutDTO = WorkoutDTO
@@ -59,9 +64,10 @@ fromDomainExercise ex = ExerciseDTO
   , muscleGroup = show (Domain.muscleGroup ex)
   , prescribedSets = Domain.prescribedSets ex
   , prescribedReps = Domain.prescribedReps ex
-  , performedSets = Domain.performedSets ex
-  , performedReps = Domain.performedReps ex
+  , sets = map toSet (Domain.sets ex)
   }
+  where
+    toSet sp = SetDTO { weight = Domain.weight sp, reps = Domain.reps sp }
 
 fromDomainWorkout :: Domain.MesocycleWorkout -> WorkoutDTO
 fromDomainWorkout w = WorkoutDTO

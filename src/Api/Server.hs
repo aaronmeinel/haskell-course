@@ -5,8 +5,8 @@ module Api.Server (app) where
 import Servant
 import Network.Wai (Application)
 import Network.Wai.Middleware.Cors (simpleCors)
-import Api.Routes
-import Api.Types
+import Api.Routes (RootAPI, VersionResponse(..))
+import Api.Types as T
 import qualified Mesocycle
 import qualified WorkoutTemplate
 import Data.IORef
@@ -56,15 +56,15 @@ initialPlan = Mesocycle.generateMesocycle sampleTemplate 4
 type FullAPI = RootAPI :<|> Raw
 
 serverRoot :: Server RootAPI
-serverRoot = versionH :<|> planH :<|> logH
+serverRoot = versionH :<|> planH :<|> logSetH
   where
     versionH = pure (VersionResponse 1)
     planH = do
       p <- liftIO (readIORef globalPlanRef)
-      pure (fromDomainPlan p)
-    logH req = do
-      _ <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> (applyLog req p, ()))
-      pure (LogResponse True "Logged")
+      pure (T.fromDomainPlan p)
+    logSetH req = do
+      _ <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> (applySetLog req p, ()))
+      pure (T.LogResponse True "Set logged")
 
 server :: Server FullAPI
 server = serverRoot :<|> serveDirectoryFileServer "dist"
@@ -72,21 +72,22 @@ server = serverRoot :<|> serveDirectoryFileServer "dist"
 app :: Application
 app = simpleCors $ serve (Proxy :: Proxy FullAPI) server
 
--- Apply an ExerciseLogRequest to a Mesocycle (naive traversal)
-applyLog :: ExerciseLogRequest -> Mesocycle.Mesocycle -> Mesocycle.Mesocycle
-applyLog req m = m { Mesocycle.weeks = map updateWeek (Mesocycle.weeks m) }
+-- Apply a SetLogRequest to a Mesocycle (update a single set within an exercise)
+applySetLog :: T.SetLogRequest -> Mesocycle.Mesocycle -> Mesocycle.Mesocycle
+applySetLog req m = m { Mesocycle.weeks = map updateWeek (Mesocycle.weeks m) }
   where
     updateWeek w
-      | Mesocycle.weekNumber w /= week req = w
+      | Mesocycle.weekNumber w /= T.week req = w
       | otherwise = w { Mesocycle.workouts = mapWithIndex updateWorkout (Mesocycle.workouts w) }
     updateWorkout i wo
-      | i /= workoutIndex req = wo
+      | i /= T.workoutIndex req = wo
       | otherwise = wo { Mesocycle.exercises = mapWithIndex updateExercise (Mesocycle.exercises wo) }
     updateExercise j ex
-      | j /= exerciseIndex req = ex
+      | j /= T.exerciseIndex req = ex
+      | otherwise = ex { Mesocycle.sets = mapWithIndex updateSet (Mesocycle.sets ex) }
+    updateSet k setPerf
+      | k /= T.setIndex req = setPerf
       | otherwise =
-      let ExerciseLogRequest{ loggedSets = ls, loggedReps = lr } = req
-      in ex { Mesocycle.performedSets = Just ls
-        , Mesocycle.performedReps = Just lr
-                }
+          let T.SetLogRequest{ T.loggedWeight = wVal, T.loggedReps = rVal } = req
+          in setPerf { Mesocycle.weight = wVal, Mesocycle.reps = rVal }
     mapWithIndex f = zipWith f [0..]
