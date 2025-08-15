@@ -19,30 +19,11 @@ import System.IO.Unsafe (unsafePerformIO)
 import Servant.Server.StaticFiles ()
 import Control.Monad.IO.Class (liftIO)
 import qualified MesocyclePersistence
-import System.Directory (doesFileExist, createDirectoryIfMissing)
-import Control.Exception (catch, IOException)
 
 
 {-# NOINLINE globalPlanRef #-}
 globalPlanRef :: IORef Mesocycle.Mesocycle
-globalPlanRef = unsafePerformIO (do
-  createDirectoryIfMissing True dataDir
-  exists <- doesFileExist persistFile
-  plan <- if exists
-            then do
-              m <- MesocyclePersistence.loadMesocycle persistFile `catch` handleLoad
-              case m of
-                Just p -> pure p
-                Nothing -> do
-                  MesocyclePersistence.saveMesocycle persistFile initialPlan
-                  pure initialPlan
-            else do
-              MesocyclePersistence.saveMesocycle persistFile initialPlan
-              pure initialPlan
-  newIORef plan)
-  where
-    handleLoad :: IOException -> IO (Maybe Mesocycle.Mesocycle)
-    handleLoad _ = pure Nothing
+globalPlanRef = unsafePerformIO (MesocyclePersistence.loadOrInitMesocycle initialPlan >>= newIORef)
 
 initialPlan :: Mesocycle.Mesocycle
 initialPlan = Mesocycle.generateMesocycle sampleTemplate 4
@@ -86,11 +67,11 @@ serverRoot = versionH :<|> planH :<|> logH :<|> logSetH
       pure (fromDomainPlan p)
     logH reqBody = do
       newPlan <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> let p' = applyLog reqBody p in (p', p'))
-      liftIO $ MesocyclePersistence.saveMesocycle persistFile newPlan
+      liftIO $ MesocyclePersistence.saveMesocycle MesocyclePersistence.mesocycleFile newPlan
       pure (LogResponse True "Logged")
     logSetH sreq = do
       newPlan <- liftIO $ atomicModifyIORef' globalPlanRef (\p -> let p' = applySetLog sreq p in (p', p'))
-      liftIO $ MesocyclePersistence.saveMesocycle persistFile newPlan
+      liftIO $ MesocyclePersistence.saveMesocycle MesocyclePersistence.mesocycleFile newPlan
       pure (LogResponse True "Set Logged")
 
 server :: Server FullAPI
@@ -162,10 +143,4 @@ applySetLog SetLogRequest
 
     mapWithIndex f = zipWith f [0..]
 
--- Persistence file paths
-dataDir :: FilePath
-dataDir = "data"
-
-
-persistFile :: FilePath
-persistFile = dataDir ++ "/mesocycle.json"
+-- (Persistence file path details now centralized in MesocyclePersistence)
